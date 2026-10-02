@@ -1,0 +1,34 @@
+# MedicalOS weeks 1-2 -- the runtime dependency set of the medos image, pinned exactly.
+#
+# pyproject.toml states FLOORS (`numpy>=1.26`) because it describes a library that has to
+# co-exist with whatever else a developer has installed. This file states PINS, because it
+# describes a deployment artifact: the e2e run in tests/e2e/test_demo.py makes a PASS/FAIL
+# claim about a specific stack, and a floating dependency turns that claim into an anecdote
+# three weeks later. Same reasoning as the image tags in docker-compose.yml.
+#
+# Versions are the ones the slice was developed and proved against on the host
+# (python 3.11.9 / numpy 1.26.4 / pydicom 3.0.2 / highdicom 0.28.1).
+
+numpy==1.26.4
+pydicom==3.0.2
+highdicom==0.28.1
+pynrrd==1.1.3
+requests==2.32.3
+
+# medos/medos/db: psycopg 3, no ORM (CONTRACT.md section 1). The `binary` extra carries its own
+# libpq so the image needs no build toolchain.
+psycopg[binary]==3.2.3
+
+# medos/medos/api: FastAPI for MOS-API-008's `additionalProperties: false` with a per-pointer
+# violations[]; uvicorn as the ASGI server. Replaced wholesale by the Go control plane at
+# weeks 3-5 (MOS-REL-084), which is why nothing else framework-shaped is here.
+fastapi==0.115.6
+uvicorn==0.34.0
+
+# medos/medos/security/hashing.py: Argon2id for API-key secret verification (MOS-SEC-013).
+# ADDED BY THE GATEWAY BLOCK, not by it: `medos/medos/security/` is weeks 3-5 item 2's module
+# and this pin belongs to it. It is here because the image would not import otherwise --
+# `medos.security.__init__` pulls `apikeys` -> `store` -> `hashing` -> argon2, so EVERY
+# service in this stack needs it, the Gateway included. If item 2's author pins a
+# different version, theirs wins and this line goes.
+argon2-cffi==23.1.0

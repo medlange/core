@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/sampling-plan/1.0.0.json",
+  "title": "SamplingPlan",
+  "description": "The wire form of one sampling_plans row (0011_curation.up.sql section 3): chapter 17's SamplingPlan (MOS-TRAIN-083, MOS-STORE-359). Response body of table 10.2-B rows R19, R20 and R21. The two fractions are projected although no request member sets them, because MOS-TRAIN-083's naive floor and MOS-TRAIN-101's de-novo control floor are facts about the corpus the plan will draw and MOS-UI-121's argument applies to them: a number the operator can see while they work is a number they can notice, and the same number in a report six weeks later is not. There is no public_id column on this table, so the wire id is the row's UUIDv7 surrogate key (MOS-STORE-208).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sampling_plan_id",
+    "capability_id",
+    "plan_version",
+    "strata",
+    "min_naive_fraction",
+    "de_novo_control_fraction",
+    "spec_digest",
+    "sealed_at",
+    "created_at"
+  ],
+  "properties": {
+    "sampling_plan_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "capability_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "plan_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "strata": {
+      "description": "Returned in the shape row R19 accepted it. Not re-typed here as a closed object: the column is jsonb and a plan declared before a later edit to MOS-UI-112's facet table would then fail to serialise through its own read route, which is the one way a sealed row becomes unreadable.",
+      "type": "object"
+    },
+    "min_naive_fraction": {
+      "description": "MOS-TRAIN-083's floor on the fraction of patients the platform never ran on. Server-set; no request member reaches it. Without it the corpus can only ever describe the inside of the current envelope, and the model can never be shown to work outside it.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "de_novo_control_fraction": {
+      "description": "MOS-TRAIN-101's control arm, at least 0.100, drawn by the plan rather than chosen by readers. 0011_curation.up.sql CHECKs the floor; MOS-UI-126 forbids the console offering the arm as an optional extra.",
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 1
+    },
+    "spec_digest": {
+      "description": "sha256 over the canonical form of the plan body. MOS-STORE-359 seals the row: a plan edited after the draw cannot describe the draw, so the digest is the identity of what was actually declared. Rendered as data the operator may copy, never as data they compose (MOS-UI-101).",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sealed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

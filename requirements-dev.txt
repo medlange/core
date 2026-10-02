@@ -1,0 +1,28 @@
+# MedicalOS development environment.
+#
+# Install into the project venv so the toolchain does not depend on a
+# session-scoped scratchpad directory:
+#
+#   python -m venv .venv
+#   .venv/Scripts/python.exe -m pip install -r requirements-dev.txt
+#
+# Pins are the union of medos/deploy/compose and medos/tools/deid. The third source
+# was spikes/week0, deleted with the spike (register entry 118); its pins stayed
+# because the tests that needed them are tests/unit/test_geometry_contract.py now.
+argon2-cffi==23.1.0
+# medos/medos/evidence/dsse.py -- MOS-EVID-118 mandates Ed25519 in a DSSE envelope over every
+# ValidationReport, and there is no stdlib Ed25519. Signing goes through this and only
+# this; the verify-only RFC 8032 fallback beside it is for an air-gapped verifier.
+cryptography==44.0.0
+fastapi==0.115.6
+highdicom==0.28.1
+numpy==1.26.4
+pillow>=10,<13
+psycopg[binary]==3.2.3
+pydicom==3.0.2
+pyjpegls>=1.4,<2
+pynrrd==1.1.3
+requests==2.32.3
+uvicorn==0.34.0
+httpx==0.28.1
+pytest==8.3.4

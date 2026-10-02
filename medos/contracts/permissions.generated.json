@@ -1,0 +1,678 @@
+{
+  "_generated_by": "medos/tools/permcheck.py --emit. DO NOT EDIT.",
+  "_source": "medos/contracts/permissions.yaml",
+  "_spec": "MOS-SEC-031, MOS-SEC-032, MOS-SEC-033",
+  "version": 1,
+  "classes": [
+    "read",
+    "write",
+    "phi",
+    "clinical",
+    "admin",
+    "governance"
+  ],
+  "permissions": [
+    {
+      "id": "annotation_set.create",
+      "class": "phi",
+      "grants": "annotations"
+    },
+    {
+      "id": "annotation_set.delete",
+      "class": "phi",
+      "grants": "annotations"
+    },
+    {
+      "id": "annotation_set.read",
+      "class": "phi",
+      "grants": "annotations"
+    },
+    {
+      "id": "annotation_set.update",
+      "class": "phi",
+      "grants": "annotations"
+    },
+    {
+      "id": "api_key.create",
+      "class": "admin",
+      "grants": "mint a key within own permissions"
+    },
+    {
+      "id": "api_key.read",
+      "class": "read",
+      "grants": "list key metadata (never the secret)"
+    },
+    {
+      "id": "api_key.revoke",
+      "class": "admin",
+      "grants": "revoke any key in the tenant"
+    },
+    {
+      "id": "artifact.approve",
+      "class": "governance",
+      "grants": "approve an artifact for use in a tenant"
+    },
+    {
+      "id": "artifact.publish",
+      "class": "governance",
+      "grants": "publish an immutable `Artifact` of any kind (ch. 6, `MOS-REG-108`)"
+    },
+    {
+      "id": "artifact.recall",
+      "class": "governance",
+      "grants": "recall an artifact"
+    },
+    {
+      "id": "artifact.status.set",
+      "class": "governance",
+      "grants": "set an artifact's `lifecycle_status` (ch. 6, `MOS-REG-108`)"
+    },
+    {
+      "id": "artifact.suspend",
+      "class": "governance",
+      "grants": "suspend an artifact, stopping dispatch platform-wide"
+    },
+    {
+      "id": "audit.export",
+      "class": "governance",
+      "grants": "export a signed audit range"
+    },
+    {
+      "id": "audit.read",
+      "class": "governance",
+      "grants": "read `AuditEvent` records"
+    },
+    {
+      "id": "audit.verify",
+      "class": "governance",
+      "grants": "run chain verification"
+    },
+    {
+      "id": "break_glass.invoke",
+      "class": "admin",
+      "grants": "open a time-boxed platform-admin window"
+    },
+    {
+      "id": "capability.create",
+      "class": "governance",
+      "grants": "define a capability"
+    },
+    {
+      "id": "capability.delete",
+      "class": "governance",
+      "grants": "delete an unreferenced capability"
+    },
+    {
+      "id": "capability.read",
+      "class": "read",
+      "grants": "read capabilities"
+    },
+    {
+      "id": "capability.update",
+      "class": "governance",
+      "grants": "change a capability, incl. its `AcceptanceCriteria`"
+    },
+    {
+      "id": "configuration_search.declare",
+      "class": "write",
+      "grants": "register a `ConfigurationSearch` with a digested declarative space and a bounded budget (ch. 17, `MOS-TRAIN-220`, `MOS-TRAIN-234`)"
+    },
+    {
+      "id": "configuration_search.nominate",
+      "class": "write",
+      "grants": "nominate the one trial a search may register and evaluate on `test` (ch. 17, `MOS-TRAIN-216`, `MOS-TRAIN-217`)"
+    },
+    {
+      "id": "configuration_search.read",
+      "class": "read",
+      "grants": "read a `ConfigurationSearch`, its space, its budget and its nomination (ch. 17, `MOS-TRAIN-213`, `MOS-TRAIN-218`)"
+    },
+    {
+      "id": "conversion_run.read",
+      "class": "read",
+      "grants": "read a `ConversionRun` and its equivalence result (ch. 17, `MOS-TRAIN-156`, `MOS-TRAIN-161`)"
+    },
+    {
+      "id": "conversion_run.submit",
+      "class": "write",
+      "grants": "submit a `ConversionRun` against a registered `ModelVersion` (ch. 17, `MOS-TRAIN-156`, `MOS-TRAIN-169`)"
+    },
+    {
+      "id": "corpus_stratification_report.read",
+      "class": "read",
+      "grants": "read a batch's `CorpusStratificationReport` (ch. 17, `MOS-TRAIN-088`)"
+    },
+    {
+      "id": "curation_decision.record",
+      "class": "phi",
+      "grants": "record a `CurationDecision` on a candidate as the named human (ch. 17, `MOS-TRAIN-080`)"
+    },
+    {
+      "id": "dataset.create",
+      "class": "write",
+      "grants": "dataset catalogue"
+    },
+    {
+      "id": "dataset.delete",
+      "class": "write",
+      "grants": "dataset catalogue"
+    },
+    {
+      "id": "dataset.read",
+      "class": "read",
+      "grants": "dataset catalogue"
+    },
+    {
+      "id": "dataset.update",
+      "class": "write",
+      "grants": "dataset catalogue"
+    },
+    {
+      "id": "dataset_split.freeze",
+      "class": "phi",
+      "grants": "freeze a patient-level `DatasetSplit` manifest (ch. 7, `MOS-EVID-028`)"
+    },
+    {
+      "id": "dataset_split.read",
+      "class": "phi",
+      "grants": "read a frozen `DatasetSplit` manifest"
+    },
+    {
+      "id": "dataset_version.create",
+      "class": "phi",
+      "grants": "seal a dataset version"
+    },
+    {
+      "id": "dataset_version.delete",
+      "class": "phi",
+      "grants": "delete a version not referenced by any `EvaluationRun`"
+    },
+    {
+      "id": "dataset_version.read",
+      "class": "phi",
+      "grants": "read a sealed dataset version manifest"
+    },
+    {
+      "id": "decision.read",
+      "class": "governance",
+      "grants": "read `PolicyDecision` records"
+    },
+    {
+      "id": "deployment.approve_clinical",
+      "class": "governance",
+      "grants": "be the named approver of the E1 clinical gate (ch. 9, `MOS-SAFE-036`)"
+    },
+    {
+      "id": "deployment.create",
+      "class": "clinical",
+      "grants": "deploy a ServiceVersion into one `(tenant, environment, capability)` slot"
+    },
+    {
+      "id": "deployment.gate.override",
+      "class": "governance",
+      "grants": "override an `INDETERMINATE` deployment-gate verdict (ch. 7, `MOS-EVID-093`); never a `FAIL`"
+    },
+    {
+      "id": "deployment.promote",
+      "class": "clinical",
+      "grants": "`role` → `ACTIVE` (cutover, rollback, canary promotion) or `SUSPENDED` → `SERVING`"
+    },
+    {
+      "id": "deployment.read",
+      "class": "read",
+      "grants": "read deployments"
+    },
+    {
+      "id": "deployment.retire",
+      "class": "clinical",
+      "grants": "`state` → `DRAINING`; terminal"
+    },
+    {
+      "id": "deployment.suspend",
+      "class": "clinical",
+      "grants": "`state` → `SUSPENDED`; reversible, reason mandatory"
+    },
+    {
+      "id": "deployment.update",
+      "class": "clinical",
+      "grants": "change `traffic_permille`, `pin_range`, `promotion_policy`, `residency`"
+    },
+    {
+      "id": "evaluation.delete",
+      "class": "governance",
+      "grants": "delete a run not referenced by a report"
+    },
+    {
+      "id": "evaluation.read",
+      "class": "phi",
+      "grants": "read `EvaluationRun` incl. per-case metrics"
+    },
+    {
+      "id": "evaluation.run",
+      "class": "write",
+      "grants": "start an evaluation"
+    },
+    {
+      "id": "harvest_batch.open",
+      "class": "phi",
+      "grants": "open a `HarvestBatch` against a sealed `SamplingPlan` and draw its candidates (ch. 17, `MOS-TRAIN-078`, `MOS-TRAIN-083`)"
+    },
+    {
+      "id": "harvest_batch.read",
+      "class": "read",
+      "grants": "read a `HarvestBatch`, its state and the composition of the candidate set drawn into it (ch. 17, `MOS-TRAIN-078`; ch. 19, `MOS-UI-115`)"
+    },
+    {
+      "id": "harvest_candidate.read",
+      "class": "phi",
+      "grants": "read `HarvestCandidate` rows and the settled decision on one (ch. 17, `MOS-TRAIN-079`)"
+    },
+    {
+      "id": "job.cancel",
+      "class": "clinical",
+      "grants": "**RESERVED, not implemented before 0.3** (spine section 4)"
+    },
+    {
+      "id": "job.create",
+      "class": "clinical",
+      "grants": "create a job"
+    },
+    {
+      "id": "job.delete",
+      "class": "phi",
+      "grants": "delete a job and its execution artifacts"
+    },
+    {
+      "id": "job.read",
+      "class": "read",
+      "grants": "read jobs, steps, events"
+    },
+    {
+      "id": "job.retry",
+      "class": "clinical",
+      "grants": "re-dispatch a `FAILED` job on its pinned resolution (ch. 5, T13, `MOS-EXEC-012`)"
+    },
+    {
+      "id": "llm.external_call",
+      "class": "phi",
+      "grants": "invoke a provider outside the tenant boundary"
+    },
+    {
+      "id": "model.create",
+      "class": "write",
+      "grants": "model catalogue"
+    },
+    {
+      "id": "model.delete",
+      "class": "write",
+      "grants": "model catalogue"
+    },
+    {
+      "id": "model.read",
+      "class": "read",
+      "grants": "model catalogue"
+    },
+    {
+      "id": "model.update",
+      "class": "write",
+      "grants": "model catalogue"
+    },
+    {
+      "id": "model_version.delete",
+      "class": "governance",
+      "grants": "delete a never-deployed model version"
+    },
+    {
+      "id": "model_version.publish",
+      "class": "governance",
+      "grants": "publish a signed model version"
+    },
+    {
+      "id": "model_version.read",
+      "class": "read",
+      "grants": "read a model version and its pinned `PreprocessingSpec`"
+    },
+    {
+      "id": "patient.read",
+      "class": "phi",
+      "grants": "read the patient projection incl. identifiers"
+    },
+    {
+      "id": "phi.erase",
+      "class": "phi",
+      "grants": "execute an `ErasureRequest`"
+    },
+    {
+      "id": "phi.policy_update",
+      "class": "governance",
+      "grants": "change de-identification profile or `external_llm_allowed`"
+    },
+    {
+      "id": "phi.reidentify",
+      "class": "phi",
+      "grants": "reverse a de-identification UID mapping"
+    },
+    {
+      "id": "policy.activate",
+      "class": "governance",
+      "grants": "activate a PolicySet for a tenant"
+    },
+    {
+      "id": "policy.author",
+      "class": "governance",
+      "grants": "upload a new PolicySet"
+    },
+    {
+      "id": "policy.read",
+      "class": "read",
+      "grants": "read the active PolicySet"
+    },
+    {
+      "id": "policy.simulate",
+      "class": "governance",
+      "grants": "run a decision in shadow mode"
+    },
+    {
+      "id": "result.export",
+      "class": "phi",
+      "grants": "export result data"
+    },
+    {
+      "id": "result.read",
+      "class": "clinical",
+      "grants": "read a `Result` and its `ResultBundle`"
+    },
+    {
+      "id": "result.read.research",
+      "class": "clinical",
+      "grants": "see `research_only` results in list endpoints (ch. 9 §9.4 E5, `MOS-SAFE-041`)"
+    },
+    {
+      "id": "result.review.assign",
+      "class": "clinical",
+      "grants": "set `assignee_user_id` on a review (ch. 9, `MOS-SAFE-067`)"
+    },
+    {
+      "id": "result.review.read",
+      "class": "clinical",
+      "grants": "read review rows and their round history (ch. 9, `MOS-SAFE-067`)"
+    },
+    {
+      "id": "result.review.reopen",
+      "class": "clinical",
+      "grants": "open a new review round on a terminal review (ch. 9, `MOS-SAFE-066`)"
+    },
+    {
+      "id": "result.review.submit",
+      "class": "clinical",
+      "grants": "claim, release and submit a review round (ch. 9, `MOS-SAFE-067`, `MOS-SAFE-069`)"
+    },
+    {
+      "id": "result.submit",
+      "class": "clinical",
+      "grants": "submit a `ResultBundle` (held only by Job Tokens)"
+    },
+    {
+      "id": "result.supersede",
+      "class": "clinical",
+      "grants": "mark a result superseded by a newer one"
+    },
+    {
+      "id": "role.create",
+      "class": "admin",
+      "grants": "define a tenant role"
+    },
+    {
+      "id": "role.delete",
+      "class": "admin",
+      "grants": "delete an unassigned role"
+    },
+    {
+      "id": "role.read",
+      "class": "read",
+      "grants": "read roles and their permissions"
+    },
+    {
+      "id": "role.update",
+      "class": "admin",
+      "grants": "change a role's permission set"
+    },
+    {
+      "id": "sampling_plan.declare",
+      "class": "write",
+      "grants": "declare a versioned `SamplingPlan` before any candidate is drawn (ch. 17, `MOS-TRAIN-083`, `MOS-STORE-359`)"
+    },
+    {
+      "id": "sampling_plan.read",
+      "class": "read",
+      "grants": "read a versioned `SamplingPlan` and the `spec_digest` it was sealed under (ch. 17, `MOS-TRAIN-083`)"
+    },
+    {
+      "id": "service.create",
+      "class": "write",
+      "grants": "register a service"
+    },
+    {
+      "id": "service.delete",
+      "class": "write",
+      "grants": "delete a service with no versions"
+    },
+    {
+      "id": "service.read",
+      "class": "read",
+      "grants": "read services"
+    },
+    {
+      "id": "service.update",
+      "class": "write",
+      "grants": "change service identity/ownership"
+    },
+    {
+      "id": "service_account.create",
+      "class": "admin",
+      "grants": "create one"
+    },
+    {
+      "id": "service_account.delete",
+      "class": "admin",
+      "grants": "delete one"
+    },
+    {
+      "id": "service_account.read",
+      "class": "read",
+      "grants": "list service accounts"
+    },
+    {
+      "id": "service_account.update",
+      "class": "admin",
+      "grants": "change its roles"
+    },
+    {
+      "id": "service_version.approve",
+      "class": "governance",
+      "grants": "accept a version for this tenant as the named human, `VALIDATED → APPROVED` (ch. 2, `MOS-SVC-106`)"
+    },
+    {
+      "id": "service_version.delete",
+      "class": "governance",
+      "grants": "delete a never-deployed version"
+    },
+    {
+      "id": "service_version.deprecate",
+      "class": "governance",
+      "grants": "mark deprecated / recalled"
+    },
+    {
+      "id": "service_version.publish",
+      "class": "governance",
+      "grants": "publish a signed immutable version"
+    },
+    {
+      "id": "service_version.read",
+      "class": "read",
+      "grants": "read versions and manifests"
+    },
+    {
+      "id": "study.delete",
+      "class": "phi",
+      "grants": "remove an ingested study from platform storage"
+    },
+    {
+      "id": "study.export",
+      "class": "phi",
+      "grants": "download study data outside the platform"
+    },
+    {
+      "id": "study.ingest",
+      "class": "phi",
+      "grants": "push a study to the platform through the API (ch. 3, `MOS-DATA-056`)"
+    },
+    {
+      "id": "study.read",
+      "class": "phi",
+      "grants": "read study/series/instance metadata"
+    },
+    {
+      "id": "study.read_pixels",
+      "class": "phi",
+      "grants": "retrieve pixel data through the Gateway"
+    },
+    {
+      "id": "study.write",
+      "class": "clinical",
+      "grants": "STOW generated objects into the PACS"
+    },
+    {
+      "id": "tenant.create",
+      "class": "admin",
+      "grants": "create a tenant (system tenant only)"
+    },
+    {
+      "id": "tenant.delete",
+      "class": "admin",
+      "grants": "terminate a tenant, triggering full erasure"
+    },
+    {
+      "id": "tenant.read",
+      "class": "read",
+      "grants": "read tenant settings"
+    },
+    {
+      "id": "tenant.update",
+      "class": "admin",
+      "grants": "change tenant settings other than PHI policy"
+    },
+    {
+      "id": "training_data_policy.read",
+      "class": "read",
+      "grants": "read whether the tenant's `TrainingDataPolicy` permits training use, and the instrument recorded (ch. 17, `MOS-TRAIN-072`; ch. 19, `MOS-UI-110`)"
+    },
+    {
+      "id": "training_data_policy.record",
+      "class": "governance",
+      "grants": "record the tenant's `TrainingDataPolicy` as the named human and set `training_use_allowed` with it (ch. 17, `MOS-TRAIN-072`, `MOS-TRAIN-073`)"
+    },
+    {
+      "id": "training_run.cancel",
+      "class": "write",
+      "grants": "cancel a `TrainingRun` in flight as the named human (ch. 17, `MOS-TRAIN-122`; ch. 19, `MOS-UI-156`)"
+    },
+    {
+      "id": "training_run.read",
+      "class": "read",
+      "grants": "read a `TrainingRun`, its state and its reproducibility binding (ch. 17, `MOS-TRAIN-124`)"
+    },
+    {
+      "id": "training_run.submit",
+      "class": "write",
+      "grants": "submit a `TrainingRun` against a sealed cohort and a frozen split (ch. 17, `MOS-TRAIN-122`, `MOS-TRAIN-124`)"
+    },
+    {
+      "id": "user.delete",
+      "class": "admin",
+      "grants": "remove a user (audit rows survive)"
+    },
+    {
+      "id": "user.invite",
+      "class": "admin",
+      "grants": "create a user"
+    },
+    {
+      "id": "user.read",
+      "class": "read",
+      "grants": "list and read users"
+    },
+    {
+      "id": "user.update",
+      "class": "admin",
+      "grants": "change a user's roles or status"
+    },
+    {
+      "id": "validation_report.approve",
+      "class": "governance",
+      "grants": "sign as the named human approver"
+    },
+    {
+      "id": "validation_report.create",
+      "class": "governance",
+      "grants": "generate a report from a run"
+    },
+    {
+      "id": "validation_report.export",
+      "class": "governance",
+      "grants": "export the signed bundle"
+    },
+    {
+      "id": "validation_report.read",
+      "class": "read",
+      "grants": "read a report"
+    },
+    {
+      "id": "validation_report.revoke",
+      "class": "governance",
+      "grants": "revoke a report"
+    },
+    {
+      "id": "webhook.create",
+      "class": "write",
+      "grants": "webhook endpoints and their HMAC keys"
+    },
+    {
+      "id": "webhook.delete",
+      "class": "write",
+      "grants": "webhook endpoints and their HMAC keys"
+    },
+    {
+      "id": "webhook.read",
+      "class": "read",
+      "grants": "webhook endpoints and their HMAC keys"
+    },
+    {
+      "id": "webhook.update",
+      "class": "write",
+      "grants": "webhook endpoints and their HMAC keys"
+    }
+  ],
+  "not_permissions": [
+    "dataset.write",
+    "deployment.delete",
+    "deployment.write",
+    "job.requeue",
+    "model.write",
+    "result.publish",
+    "result.review",
+    "service.approve",
+    "service.publish",
+    "service.write",
+    "tenant.write",
+    "user.write",
+    "validation.approve",
+    "validation.read",
+    "webhook.write"
+  ],
+  "unregistered_in_use": [
+    "evidence.report.issue",
+    "evidence.run",
+    "phi.admin"
+  ]
+}

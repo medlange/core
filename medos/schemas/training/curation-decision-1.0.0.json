@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/curation-decision/1.0.0.json",
+  "title": "CurationDecision",
+  "description": "The wire form of the settled decision on one HarvestCandidate: chapter 17's CurationDecision (MOS-TRAIN-080), physical form 0011_curation.up.sql's curation_decisions. Response body of table 10.2-B rows R2 (GET, permission harvest_candidate.read) and R3 (POST, permission curation_decision.record). Reading the decision is reading the candidate's curation state, which is why R2 takes the candidate's read permission and not a second one. The row is append-only (MOS-STORE-359, MOS-TRAIN-203): deleting an excluded row MUST be refused, so there is no PATCH and no DELETE on this resource and none is reserved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "curation_decision_id",
+    "harvest_candidate_id",
+    "decision",
+    "reason_code",
+    "note",
+    "review_seconds",
+    "decided_by",
+    "decided_at"
+  ],
+  "properties": {
+    "curation_decision_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "harvest_candidate_id": {
+      "description": "curation_decisions.candidate_id, spelled as the path parameter of MOS-API-112 spells it.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "include",
+        "exclude",
+        "defer"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "reason_code": {
+      "description": "Null unless decision is exclude. MOS-TRAIN-081 aggregates these per cohort and reproduces them in any ValidationReport citing the DatasetVersion, so the value is part of the evidence and not a UI convenience.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "quality_artefact",
+        "wrong_anatomy",
+        "wrong_phase",
+        "prior_treatment",
+        "duplicate_patient",
+        "geometry_unsupported",
+        "annotation_infeasible",
+        "out_of_scope",
+        null
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "note": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 4096
+    },
+    "review_seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "decided_by": {
+      "description": "MOS-TRAIN-080's named human, as a user id. MOS-API-006 forbids the name itself in a response body.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "auto_excluded_predicate_id": {
+      "description": "Present only on an exclusion MOS-TRAIN-080 permits to be mechanical -- gantry tilt rejected, non-uniform spacing, missing series, duplicate series_pixel_digest. Auto-INCLUSION MUST NOT be implemented, so this member can never accompany decision: include. Carried on harvest_candidates, projected here because MOS-TRAIN-080 requires the exclusion to be 'visible in the queue as an exclusion rather than an absence' and the queue reads decisions.",
+      "type": "string",
+      "minLength": 1
+    },
+    "auto_excluded_predicate_digest": {
+      "description": "MOS-STORE-211's sha256_digest domain: lower-case hex prefixed sha256:. Recorded with the predicate id so the exclusion is reproducible.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "dependentRequired": {
+    "auto_excluded_predicate_id": [
+      "auto_excluded_predicate_digest"
+    ],
+    "auto_excluded_predicate_digest": [
+      "auto_excluded_predicate_id"
+    ]
+  }
+}

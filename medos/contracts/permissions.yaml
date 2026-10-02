@@ -1,0 +1,582 @@
+# =====================================================================================
+# medos/contracts/permissions.yaml -- the ONE source file MOS-SEC-032 requires.
+#
+#   MOS-SEC-032  "The permission list MUST be generated from one source file,
+#                `medos/contracts/permissions.yaml`, into: Go constants, the Cedar action
+#                schema, the OpenAPI security scheme descriptions, and the seed-role
+#                migration. CI MUST fail if any generated file differs from a fresh
+#                generation. Every `permission:` value in `medos/api/v1/routes.{core,train}.yaml`
+#                (MOS-API-085) MUST be a key present in this file."
+#   MOS-SEC-031  the identifier grammar: `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,2}$`.
+#                Four or more segments is a build error.
+#   MOS-SEC-033  a permission absent from this file is unknown and MUST deny.
+#
+# `permissions:` below carries one key per row of the catalogue in docs/spec/08-security.md
+# section 8.3.2 and no others, which is chapter 8's acceptance check 5 stated as a file.
+# Chapter 8 is the only source of permission spellings; this file is that chapter in the
+# form a build can read, and `medos/tools/permcheck.py` refuses any divergence in either
+# direction -- identifier, grants prose or class.
+#
+# WHAT THIS FILE GENERATES TODAY, AND WHAT IT DOES NOT. READ THIS BEFORE TRUSTING IT.
+# -----------------------------------------------------------------------------------
+# MOS-SEC-032 names four generated targets. This repository can produce exactly one of
+# them, and a source of truth that silently generates nothing is a source of truth in
+# name only -- so the other three are recorded here rather than implied:
+#
+#   PRODUCED
+#     medos/contracts/permissions.generated.json
+#       Written by `python medos/tools/permcheck.py --emit`. A stdlib-`json`-readable catalogue
+#       for the Python consumers that exist. `medos/medos/security/scopes.py` states in its own
+#       docstring that it cannot perform the MOS-SEC-033 resolution because "the generated
+#       permission catalogue (MOS-SEC-032)" does not exist; this file is that input. The
+#       wiring of `scopes.py` to it is a later change and is deliberately NOT done here.
+#       `tests/unit/test_permission_contract.py` fails if the committed JSON differs from
+#       a fresh generation, which is MOS-SEC-032's CI clause for the one target that has
+#       a consumer.
+#
+#   NOT PRODUCED, and why -- each is a separate, larger change
+#     Go constants
+#       There is no Go control plane in this repository. `MOS-REL-084` schedules it for
+#       weeks 3-5; `internal/api/` and `cmd/apigen` (MOS-API-086) do not exist.
+#     Cedar action schema
+#       There are no Cedar policies. Section 8.4's policy engine is unbuilt: no PolicySet
+#       artifact (MOS-SEC-062), no PDP, no `policy_activations` rows.
+#     OpenAPI security scheme descriptions
+#       `docs/api/openapi.yaml` does not exist. MOS-API-087 forbids authoring it by hand,
+#       so it can only arrive with the generator of MOS-API-086.
+#     Seed-role migration
+#       There is no `roles`, `role_permissions` or `user_roles` table. 0004_auth.up.sql
+#       created `api_keys` and stopped; 0010_safety.up.sql records the absence in its own
+#       header. Without those tables the seeded roles of section 8.3.4 and the pipeline
+#       role of MOS-SEC-158 have nowhere to be seeded, and a migration generated into an
+#       empty schema would assert a boundary that does not exist.
+#
+# SHAPE
+#   permissions:          the catalogue. One key per 8.3.2 row; `grants` and `class`
+#                         verbatim from that row.
+#   not_permissions:      the spellings 8.3.2's closing paragraph registers as NOT
+#                         permissions, each with the registered form to use instead.
+#                         Present because MOS-SEC-033 makes using one a build failure and
+#                         a reader who cannot find `service.publish` here needs to be told
+#                         what to write, not left to guess.
+#   unregistered_in_use:  identifiers this repository enforces that section 8.3.2
+#                         registers nowhere. Every one of them DENIES under MOS-SEC-033.
+#                         This block is a defect register, not a grant list, and nothing
+#                         may read it as one; `medos/tools/permcheck.py` asserts that no key of
+#                         it is a key of `permissions:`.
+# =====================================================================================
+
+version: 1
+
+# The catalogue. Generated from, and checked against, section 8.3.2 -- see the header.
+permissions:
+  tenant.read:
+    grants: "read tenant settings"
+    class: read
+  tenant.create:
+    grants: "create a tenant (system tenant only)"
+    class: admin
+  tenant.update:
+    grants: "change tenant settings other than PHI policy"
+    class: admin
+  tenant.delete:
+    grants: "terminate a tenant, triggering full erasure"
+    class: admin
+  user.read:
+    grants: "list and read users"
+    class: read
+  user.invite:
+    grants: "create a user"
+    class: admin
+  user.update:
+    grants: "change a user's roles or status"
+    class: admin
+  user.delete:
+    grants: "remove a user (audit rows survive)"
+    class: admin
+  role.read:
+    grants: "read roles and their permissions"
+    class: read
+  role.create:
+    grants: "define a tenant role"
+    class: admin
+  role.update:
+    grants: "change a role's permission set"
+    class: admin
+  role.delete:
+    grants: "delete an unassigned role"
+    class: admin
+  api_key.read:
+    grants: "list key metadata (never the secret)"
+    class: read
+  api_key.create:
+    grants: "mint a key within own permissions"
+    class: admin
+  api_key.revoke:
+    grants: "revoke any key in the tenant"
+    class: admin
+  service_account.read:
+    grants: "list service accounts"
+    class: read
+  service_account.create:
+    grants: "create one"
+    class: admin
+  service_account.update:
+    grants: "change its roles"
+    class: admin
+  service_account.delete:
+    grants: "delete one"
+    class: admin
+  patient.read:
+    grants: "read the patient projection incl. identifiers"
+    class: phi
+  study.read:
+    grants: "read study/series/instance metadata"
+    class: phi
+  study.read_pixels:
+    grants: "retrieve pixel data through the Gateway"
+    class: phi
+  study.ingest:
+    grants: "push a study to the platform through the API (ch. 3, `MOS-DATA-056`)"
+    class: phi
+  study.write:
+    grants: "STOW generated objects into the PACS"
+    class: clinical
+  study.export:
+    grants: "download study data outside the platform"
+    class: phi
+  study.delete:
+    grants: "remove an ingested study from platform storage"
+    class: phi
+  capability.read:
+    grants: "read capabilities"
+    class: read
+  capability.create:
+    grants: "define a capability"
+    class: governance
+  capability.update:
+    grants: "change a capability, incl. its `AcceptanceCriteria`"
+    class: governance
+  capability.delete:
+    grants: "delete an unreferenced capability"
+    class: governance
+  service.read:
+    grants: "read services"
+    class: read
+  service.create:
+    grants: "register a service"
+    class: write
+  service.update:
+    grants: "change service identity/ownership"
+    class: write
+  service.delete:
+    grants: "delete a service with no versions"
+    class: write
+  service_version.read:
+    grants: "read versions and manifests"
+    class: read
+  service_version.publish:
+    grants: "publish a signed immutable version"
+    class: governance
+  service_version.approve:
+    grants: "accept a version for this tenant as the named human, `VALIDATED → APPROVED` (ch. 2, `MOS-SVC-106`)"
+    class: governance
+  service_version.deprecate:
+    grants: "mark deprecated / recalled"
+    class: governance
+  service_version.delete:
+    grants: "delete a never-deployed version"
+    class: governance
+  model.read:
+    grants: "model catalogue"
+    class: read
+  model.create:
+    grants: "model catalogue"
+    class: write
+  model.update:
+    grants: "model catalogue"
+    class: write
+  model.delete:
+    grants: "model catalogue"
+    class: write
+  model_version.read:
+    grants: "read a model version and its pinned `PreprocessingSpec`"
+    class: read
+  model_version.publish:
+    grants: "publish a signed model version"
+    class: governance
+  model_version.delete:
+    grants: "delete a never-deployed model version"
+    class: governance
+  artifact.publish:
+    grants: "publish an immutable `Artifact` of any kind (ch. 6, `MOS-REG-108`)"
+    class: governance
+  artifact.approve:
+    grants: "approve an artifact for use in a tenant"
+    class: governance
+  artifact.suspend:
+    grants: "suspend an artifact, stopping dispatch platform-wide"
+    class: governance
+  artifact.recall:
+    grants: "recall an artifact"
+    class: governance
+  artifact.status.set:
+    grants: "set an artifact's `lifecycle_status` (ch. 6, `MOS-REG-108`)"
+    class: governance
+  deployment.read:
+    grants: "read deployments"
+    class: read
+  deployment.create:
+    grants: "deploy a ServiceVersion into one `(tenant, environment, capability)` slot"
+    class: clinical
+  deployment.update:
+    grants: "change `traffic_permille`, `pin_range`, `promotion_policy`, `residency`"
+    class: clinical
+  deployment.promote:
+    grants: "`role` → `ACTIVE` (cutover, rollback, canary promotion) or `SUSPENDED` → `SERVING`"
+    class: clinical
+  deployment.suspend:
+    grants: "`state` → `SUSPENDED`; reversible, reason mandatory"
+    class: clinical
+  deployment.retire:
+    grants: "`state` → `DRAINING`; terminal"
+    class: clinical
+  deployment.approve_clinical:
+    grants: "be the named approver of the E1 clinical gate (ch. 9, `MOS-SAFE-036`)"
+    class: governance
+  deployment.gate.override:
+    grants: "override an `INDETERMINATE` deployment-gate verdict (ch. 7, `MOS-EVID-093`); never a `FAIL`"
+    class: governance
+  training_data_policy.record:
+    grants: "record the tenant's `TrainingDataPolicy` as the named human and set `training_use_allowed` with it (ch. 17, `MOS-TRAIN-072`, `MOS-TRAIN-073`)"
+    class: governance
+  harvest_batch.open:
+    grants: "open a `HarvestBatch` against a sealed `SamplingPlan` and draw its candidates (ch. 17, `MOS-TRAIN-078`, `MOS-TRAIN-083`)"
+    class: phi
+  harvest_candidate.read:
+    grants: "read `HarvestCandidate` rows and the settled decision on one (ch. 17, `MOS-TRAIN-079`)"
+    class: phi
+  curation_decision.record:
+    grants: "record a `CurationDecision` on a candidate as the named human (ch. 17, `MOS-TRAIN-080`)"
+    class: phi
+  corpus_stratification_report.read:
+    grants: "read a batch's `CorpusStratificationReport` (ch. 17, `MOS-TRAIN-088`)"
+    class: read
+  training_data_policy.read:
+    grants: "read whether the tenant's `TrainingDataPolicy` permits training use, and the instrument recorded (ch. 17, `MOS-TRAIN-072`; ch. 19, `MOS-UI-110`)"
+    class: read
+  sampling_plan.read:
+    grants: "read a versioned `SamplingPlan` and the `spec_digest` it was sealed under (ch. 17, `MOS-TRAIN-083`)"
+    class: read
+  sampling_plan.declare:
+    grants: "declare a versioned `SamplingPlan` before any candidate is drawn (ch. 17, `MOS-TRAIN-083`, `MOS-STORE-359`)"
+    class: write
+  harvest_batch.read:
+    grants: "read a `HarvestBatch`, its state and the composition of the candidate set drawn into it (ch. 17, `MOS-TRAIN-078`; ch. 19, `MOS-UI-115`)"
+    class: read
+  training_run.read:
+    grants: "read a `TrainingRun`, its state and its reproducibility binding (ch. 17, `MOS-TRAIN-124`)"
+    class: read
+  training_run.submit:
+    grants: "submit a `TrainingRun` against a sealed cohort and a frozen split (ch. 17, `MOS-TRAIN-122`, `MOS-TRAIN-124`)"
+    class: write
+  training_run.cancel:
+    grants: "cancel a `TrainingRun` in flight as the named human (ch. 17, `MOS-TRAIN-122`; ch. 19, `MOS-UI-156`)"
+    class: write
+  configuration_search.read:
+    grants: "read a `ConfigurationSearch`, its space, its budget and its nomination (ch. 17, `MOS-TRAIN-213`, `MOS-TRAIN-218`)"
+    class: read
+  configuration_search.declare:
+    grants: "register a `ConfigurationSearch` with a digested declarative space and a bounded budget (ch. 17, `MOS-TRAIN-220`, `MOS-TRAIN-234`)"
+    class: write
+  configuration_search.nominate:
+    grants: "nominate the one trial a search may register and evaluate on `test` (ch. 17, `MOS-TRAIN-216`, `MOS-TRAIN-217`)"
+    class: write
+  conversion_run.read:
+    grants: "read a `ConversionRun` and its equivalence result (ch. 17, `MOS-TRAIN-156`, `MOS-TRAIN-161`)"
+    class: read
+  conversion_run.submit:
+    grants: "submit a `ConversionRun` against a registered `ModelVersion` (ch. 17, `MOS-TRAIN-156`, `MOS-TRAIN-169`)"
+    class: write
+  dataset.read:
+    grants: "dataset catalogue"
+    class: read
+  dataset.create:
+    grants: "dataset catalogue"
+    class: write
+  dataset.update:
+    grants: "dataset catalogue"
+    class: write
+  dataset.delete:
+    grants: "dataset catalogue"
+    class: write
+  dataset_version.read:
+    grants: "read a sealed dataset version manifest"
+    class: phi
+  dataset_version.create:
+    grants: "seal a dataset version"
+    class: phi
+  dataset_version.delete:
+    grants: "delete a version not referenced by any `EvaluationRun`"
+    class: phi
+  dataset_split.read:
+    grants: "read a frozen `DatasetSplit` manifest"
+    class: phi
+  dataset_split.freeze:
+    grants: "freeze a patient-level `DatasetSplit` manifest (ch. 7, `MOS-EVID-028`)"
+    class: phi
+  annotation_set.read:
+    grants: "annotations"
+    class: phi
+  annotation_set.create:
+    grants: "annotations"
+    class: phi
+  annotation_set.update:
+    grants: "annotations"
+    class: phi
+  annotation_set.delete:
+    grants: "annotations"
+    class: phi
+  evaluation.read:
+    grants: "read `EvaluationRun` incl. per-case metrics"
+    class: phi
+  evaluation.run:
+    grants: "start an evaluation"
+    class: write
+  evaluation.delete:
+    grants: "delete a run not referenced by a report"
+    class: governance
+  validation_report.read:
+    grants: "read a report"
+    class: read
+  validation_report.create:
+    grants: "generate a report from a run"
+    class: governance
+  validation_report.approve:
+    grants: "sign as the named human approver"
+    class: governance
+  validation_report.export:
+    grants: "export the signed bundle"
+    class: governance
+  validation_report.revoke:
+    grants: "revoke a report"
+    class: governance
+  job.read:
+    grants: "read jobs, steps, events"
+    class: read
+  job.create:
+    grants: "create a job"
+    class: clinical
+  job.retry:
+    grants: "re-dispatch a `FAILED` job on its pinned resolution (ch. 5, T13, `MOS-EXEC-012`)"
+    class: clinical
+  job.cancel:
+    grants: "**RESERVED, not implemented before 0.3** (spine section 4)"
+    class: clinical
+  job.delete:
+    grants: "delete a job and its execution artifacts"
+    class: phi
+  result.read:
+    grants: "read a `Result` and its `ResultBundle`"
+    class: clinical
+  result.read.research:
+    grants: "see `research_only` results in list endpoints (ch. 9 §9.4 E5, `MOS-SAFE-041`)"
+    class: clinical
+  result.export:
+    grants: "export result data"
+    class: phi
+  result.supersede:
+    grants: "mark a result superseded by a newer one"
+    class: clinical
+  result.submit:
+    grants: "submit a `ResultBundle` (held only by Job Tokens)"
+    class: clinical
+  result.review.read:
+    grants: "read review rows and their round history (ch. 9, `MOS-SAFE-067`)"
+    class: clinical
+  result.review.submit:
+    grants: "claim, release and submit a review round (ch. 9, `MOS-SAFE-067`, `MOS-SAFE-069`)"
+    class: clinical
+  result.review.assign:
+    grants: "set `assignee_user_id` on a review (ch. 9, `MOS-SAFE-067`)"
+    class: clinical
+  result.review.reopen:
+    grants: "open a new review round on a terminal review (ch. 9, `MOS-SAFE-066`)"
+    class: clinical
+  policy.read:
+    grants: "read the active PolicySet"
+    class: read
+  policy.author:
+    grants: "upload a new PolicySet"
+    class: governance
+  policy.activate:
+    grants: "activate a PolicySet for a tenant"
+    class: governance
+  policy.simulate:
+    grants: "run a decision in shadow mode"
+    class: governance
+  decision.read:
+    grants: "read `PolicyDecision` records"
+    class: governance
+  audit.read:
+    grants: "read `AuditEvent` records"
+    class: governance
+  audit.export:
+    grants: "export a signed audit range"
+    class: governance
+  audit.verify:
+    grants: "run chain verification"
+    class: governance
+  webhook.read:
+    grants: "webhook endpoints and their HMAC keys"
+    class: read
+  webhook.create:
+    grants: "webhook endpoints and their HMAC keys"
+    class: write
+  webhook.update:
+    grants: "webhook endpoints and their HMAC keys"
+    class: write
+  webhook.delete:
+    grants: "webhook endpoints and their HMAC keys"
+    class: write
+  phi.reidentify:
+    grants: "reverse a de-identification UID mapping"
+    class: phi
+  phi.erase:
+    grants: "execute an `ErasureRequest`"
+    class: phi
+  phi.policy_update:
+    grants: "change de-identification profile or `external_llm_allowed`"
+    class: governance
+  llm.external_call:
+    grants: "invoke a provider outside the tenant boundary"
+    class: phi
+  break_glass.invoke:
+    grants: "open a time-boxed platform-admin window"
+    class: admin
+
+# =====================================================================================
+# not_permissions -- section 8.3.2's closing paragraph, as data.
+#
+# "Spellings that appear in other chapters' prose and are **not** permission identifiers
+# -- a build referencing any of them MUST fail under MOS-SEC-033."
+#
+# `in_use` marks the ones this repository enforces anyway. Both instances are chapter 6
+# routes served through chapter 10's paths, and both are recorded in
+# docs/spec/99-known-inconsistencies.md entry 5 ("Twenty-one routes in chapter 10 are
+# bound to identifiers chapter 8 says are not permissions"). They are named here and NOT
+# quietly corrected: re-pointing them is chapter 10's change and the register already
+# owns its resolution.
+#
+# `named_in_8_3_2: false` marks a spelling the paragraph does NOT name and which is a
+# non-permission only by omission from the catalogue -- MOS-SEC-033 denies it either
+# way. Two of them exist, and register entry 5 asserts the paragraph names them; it
+# does not. `medos/tools/permcheck.py` asserts the flag both ways, so neither a spelling that
+# gets named nor one that stops being named can rot here.
+# =====================================================================================
+not_permissions:
+  tenant.write:
+    use: tenant.update
+    named_in_8_3_2: false
+    note: "bound by table 10.2-A and table 10.2-B rows 2 and 4; unregistered, so MOS-SEC-033 denies it."
+    register_entry: "docs/spec/99-known-inconsistencies.md entry 5"
+  user.write:
+    use: user.update
+    named_in_8_3_2: false
+    note: "bound by table 10.2-A and table 10.2-B rows 6 and 9; unregistered, so MOS-SEC-033 denies it."
+    register_entry: "docs/spec/99-known-inconsistencies.md entry 5"
+  job.requeue:
+    use: job.retry
+    note: "ch. 5 T13, MOS-EXEC-012. The transition is real; the spelling is not."
+  deployment.write:
+    use: deployment.create / deployment.update / deployment.promote / deployment.suspend / deployment.retire
+    note: "a coarsening. MOS-SEC-037a: the five verbs are not interchangeable."
+  deployment.delete:
+    use: deployment.suspend / deployment.retire
+    note: "MOS-SEC-037a: there is no deletion path for a Deployment. It is permanent provenance."
+  model.write:
+    use: model.create / model.update
+    note: "a coarsening of the model catalogue's write verbs."
+    in_use:
+      - "medos/medos/api/routes_registry.py PERMISSIONS and _KIND_WRITE (POST /api/v1/model-versions)"
+      - "tests/integration/test_artifacts.py"
+    register_entry: "docs/spec/99-known-inconsistencies.md entry 5"
+  dataset.write:
+    use: dataset.create / dataset.update / dataset_version.create
+    note: "a coarsening spanning two resources with different classes (write vs phi)."
+  validation.read:
+    use: validation_report.read
+    note: "an invention; the resource is ValidationReport."
+  validation.approve:
+    use: validation_report.approve
+    note: "an invention; the resource is ValidationReport."
+  service.write:
+    use: service.update
+    note: "a coarsening."
+  service.publish:
+    use: service_version.publish
+    note: "a Service is not published; one of its versions is."
+    in_use:
+      - "medos/medos/api/routes_registry.py PERMISSIONS and _KIND_WRITE (POST /api/v1/service-versions)"
+    register_entry: "docs/spec/99-known-inconsistencies.md entry 5"
+  webhook.write:
+    use: webhook.create / webhook.update / webhook.delete
+    note: "a coarsening."
+  result.review:
+    use: result.review.read / result.review.submit / result.review.assign / result.review.reopen
+    note: "the bare two-segment form is not a grant; MOS-SEC-031 admits the four three-segment rows."
+  service.approve:
+    use: service_version.approve
+    note: "ch. 2 MOS-SVC-106 approves a version, not a service."
+  result.publish:
+    use: result.submit
+    note: "a PEP id (section 8.4.1), not a permission. ch. 17 MOS-TRAIN-009 uses it as one."
+
+# =====================================================================================
+# unregistered_in_use -- THE DEFECT REGISTER. NOT GRANTS.
+#
+# Every key below is an identifier this repository passes to a permission check, and
+# which section 8.3.2 registers nowhere. Under MOS-SEC-033 each one is unknown and MUST
+# deny -- so each entry names an act that, on a platform with a working policy decision
+# point, no principal can perform. They are recorded rather than registered because
+# chapter 8 owns permission spellings (MOS-SEC-032) and this change owns only the rows
+# section 8.3.2 needs for the training surface; inventing four more would be this file
+# originating a spelling, which is the one thing it must never do.
+#
+# `medos/tools/permcheck.py` asserts this block is EXACTLY the set of enforced identifiers that
+# are not catalogue keys and not `not_permissions` keys: an entry that gets registered
+# must be deleted from here, and a new unregistered identifier cannot be added to the
+# code without landing here first.
+# =====================================================================================
+unregistered_in_use:
+  evidence.run:
+    required_by:
+      - "ch. 6 MOS-REG-021 -- the permission column for REGISTERED -> VALIDATING and VALIDATING -> VALIDATED"
+      - "ch. 17 MOS-TRAIN-139 -- the pipeline service account MUST hold artifact.publish and evidence.run"
+      - "ch. 14 MOS-TEST-087 -- AT-24 asserts the pipeline holds it"
+    enforced_at:
+      - "medos/medos/registry/lifecycle.py TRANSITION_PERMISSION and permission_for()"
+      - "medos/medos/api/routes_registry.py PERMISSIONS (POST /api/v1/{service,model}-versions/{id}/status)"
+      - "medos/medos/training/candidate.py PIPELINE_PERMISSIONS"
+    registered_alternative: "evaluation.run (class write) is 8.3.2's evaluation verb; MOS-SEC-158 maps 'submit an evaluation' onto it"
+    consequence: "denies under MOS-SEC-033. Four lifecycle edges -- VALIDATING, VALIDATED, SEALED, DEFECTIVE -- are unreachable by any principal."
+    register_entry: "none. This one is NOT in docs/spec/99-known-inconsistencies.md; entry 16 covers chapter 17's MOS-TRAIN-009 set and does not reach MOS-REG-021's column."
+  evidence.report.issue:
+    required_by:
+      - "ch. 17 MOS-TRAIN-151, MOS-TRAIN-173, MOS-TRAIN-174, MOS-TRAIN-232 -- promotion act A1"
+      - "ch. 16 OQ text on separation of duties"
+    enforced_at:
+      - "medos/medos/training/orchestrator.py FORBIDDEN_PERMISSIONS"
+      - "medos/medos/training/candidate.py FORBIDDEN_PIPELINE_PERMISSIONS"
+    registered_alternative: "validation_report.create / validation_report.approve"
+    consequence: "denies under MOS-SEC-033. Here it appears only in FORBIDDEN lists, where an unregistered spelling is a check that can never fire -- a principal cannot hold what cannot be granted, so the exclusion is vacuous rather than wrong."
+    register_entry: "docs/spec/99-known-inconsistencies.md entry 16; ch. 19 MOS-UI-325 also forbids shipping the string."
+  phi.admin:
+    required_by:
+      - "ch. 3 MOS-DATA-024 -- quarantined instances are invisible to every principal except one holding phi.admin"
+    enforced_at:
+      - "medos/medos/gateway/app.py (quarantine visibility, twice)"
+      - "medos/medos/gateway/projection.py (QIDO-RS exclusion)"
+    registered_alternative: "none. 8.3.2's phi rows are phi.reidentify, phi.erase and phi.policy_update; none of them means 'see quarantine'."
+    consequence: "denies under MOS-SEC-033, so the gate denies everyone -- which is the safe direction and is why it has not surfaced as a defect."
+    register_entry: "docs/spec/12-data-model.md records it verbatim as a cross-chapter defect rather than rendering it into a grant."

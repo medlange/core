@@ -1,0 +1,355 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/seal-run/1.0.0.json",
+  "title": "SealRun",
+  "description": "Response body of table 10.2-B rows R26 and R27: the resource MOS-API-056 requires a long-running operation to name in its Location header, and the resource MOS-API-057 has the client poll at Retry-After: 30. THIS IS NOT A Job AND MUST NOT CREATE ONE. MOS-API-001 makes POST /api/v1/jobs the only endpoint that may create a Job, and chapter 17 forbids the pipeline reaching one independently: MOS-TRAIN-121 C3 excludes job.create from the orchestrator account outright, C2 forbids the pipeline appearing between a Job and its Result, and C4 requires a total orchestrator outage to change the outcome of no Job at all. EvaluationRun (table 10.2-B row 42) is the precedent MOS-API-056 already names for long work that is not a Job, and this entity takes the same shape. The work runs through the Orchestrator port of MOS-TRAIN-122, whose Submit / Poll / Cancel / Logs are what rows R26 and R27 render.\n\nWHY IT CANNOT BE SYNCHRONOUS, since a synchronous seal is the obvious first design. MOS-EVID-018's series_pixel_digest is a digest over STORED pixel values 'computed by the caller that holds the pixels' -- medos/medos/evidence/manifest.py states that the module never opens a DICOM file -- and MOS-EVID-034 L4's dhash64 is a hash of the normalised mid-axial slice. Both oblige the seal to retrieve every instance of every series through the Gateway as the dataset_export consumer class (MOS-TRAIN-068, MOS-TRAIN-199), and MOS-TRAIN-114's floor of thirty test patients puts the smallest sealable cohort near a hundred and fifty. That is minutes. The binding reason is not the arithmetic: MOS-UI-134 requires L3 and L4 to be run 'as a named, progress-reported step with the cohort size shown, never as a silent wait', and a synchronous POST has nowhere to report progress from. A socket that is either open or closed also cannot tell the operator whether a DatasetVersion was created, which is the state MOS-UI-132 forbids leaving them in.\n\nWHAT check_battery IS FOR, AND WHY IT CANNOT LIE. MOS-EVID-037 rules that a split frozen from records carrying no dhash64 reports L4 `skipped` with an explicit reason rather than `pass`. That is legitimate and, until a dataset_export retrieval adapter computes the two pixel-derived quantities, it is what this platform will do -- medos/medos/evidence/repo.py::load_records returns dhash64 as None for every rehydrated record and says so. The danger is not the skip; it is a cohort sealed without near-duplicate detection being presented to a no-code operator as SEALED and read by them as CHECKED. So: the battery carries one entry per row of MOS-UI-133's nine-row table and no entry may be omitted; `outcome` is a closed four-value enum; a `skipped` entry MUST carry both a skipped_reason and an operator_disclosure; and an entry whose outcome is `pass` MUST report series_without_pixel_evidence: 0. A handler that retrieved no pixels cannot emit a schema-valid document claiming L3 or L4 passed. MOS-UI-144's 'the console MUST show the skip rather than a pass' is thereby a property of this response rather than an instruction to the browser.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seal_run_id",
+    "harvest_batch_id",
+    "dataset_id",
+    "state",
+    "progress",
+    "pixel_evidence",
+    "check_battery",
+    "refusals",
+    "dataset_version_id",
+    "dataset_split_id",
+    "manifest_digest",
+    "split_digest",
+    "corpus_stratification_report_id",
+    "reused",
+    "submitted_by",
+    "submitted_at",
+    "started_at",
+    "finished_at"
+  ],
+  "properties": {
+    "seal_run_id": {
+      "description": "A prefixed ULID on the pattern 0013_training uses for tr_, cs_ and cv_, and 0006_evidence for ds_, dsv_, spl_ and ann_. No table carries this row today: 0006_evidence holds the sealed objects and 0011_curation the batch, and neither records the ACT of sealing. The migration LANDED as medos/medos/db/migrations/0015_seal_runs.up.sql; it was owed by the change that serves rows R26 and R27, and medos/api/v1/routes.train.yaml records where it went in the comment on both rows. (There is no engine_absent: key any more.)",
+      "type": "string",
+      "pattern": "^slr_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "harvest_batch_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "dataset_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "state": {
+      "description": "REFUSED and FAILED are separate values and the separation is MOS-UI-158's and MOS-UI-160's: a refusal is the platform declining for a stated reason the operator can act on, and a failure is a platform fault that is not something the operator did. A console that rendered a blocked C1 in the register of a crash would teach the operator that the gates are unreliable. There is no CANCELLED value, because no row cancels a seal: MOS-UI-156 requires a cancel control for a TrainingRun, which can run for days, and nothing in chapter 19 asks for one here -- a value no path can reach is a state no reader can trust.",
+      "type": "string",
+      "enum": [
+        "PENDING",
+        "RETRIEVING",
+        "CHECKING",
+        "SEALING",
+        "SUCCEEDED",
+        "REFUSED",
+        "FAILED"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "progress": {
+      "description": "MOS-UI-134's 'named, progress-reported step with the cohort size shown'. The counters are what make the step named rather than a spinner.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase",
+        "patients_total",
+        "series_total",
+        "series_retrieved",
+        "instances_total",
+        "instances_retrieved"
+      ],
+      "properties": {
+        "phase": {
+          "description": "The step being reported, in the platform's own vocabulary. The console renders its own words: MOS-UI-109 requires operator copy to be a pinned string selected by identifier, and register entry 85 records that the engine's own prose is correctly written for an engineer and therefore MUST NOT be rendered verbatim.",
+          "type": "string",
+          "enum": [
+            "queued",
+            "freezing_batch",
+            "retrieving_pixels",
+            "computing_profile",
+            "running_checks",
+            "sealing_version",
+            "freezing_split",
+            "finished"
+          ],
+          "x-medicalos-enum": "closed"
+        },
+        "patients_total": {"type": "integer", "minimum": 0},
+        "series_total": {"type": "integer", "minimum": 0},
+        "series_retrieved": {"type": "integer", "minimum": 0},
+        "instances_total": {"type": "integer", "minimum": 0},
+        "instances_retrieved": {"type": "integer", "minimum": 0}
+      }
+    },
+    "pixel_evidence": {
+      "description": "Whether the run actually held pixels, reported once at the top level as well as per check. MOS-EVID-018 makes the pixel digest the caller's to compute and MOS-EVID-034 L4 makes the perceptual hash optional on a manifest record; the difference between a cohort whose images were fetched and one assembled from metadata is invisible in a sealed DatasetVersion and decides two of the nine checks.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consumer_class",
+        "series_total",
+        "series_with_pixel_digest",
+        "series_with_perceptual_hash"
+      ],
+      "properties": {
+        "consumer_class": {
+          "description": "MOS-TRAIN-068 and MOS-TRAIN-199: the pipeline acquires imaging ONLY from the de-identified side of the Gateway, as dataset_export, which forces clean_pixel_data: true and enforces burned-in-PHI screening. Const, because no other value is lawful here and a field that could carry `clinical_viewer` is a field somebody will one day set.",
+          "const": "dataset_export"
+        },
+        "series_total": {"type": "integer", "minimum": 0},
+        "series_with_pixel_digest": {"type": "integer", "minimum": 0},
+        "series_with_perceptual_hash": {"type": "integer", "minimum": 0}
+      }
+    },
+    "check_battery": {
+      "description": "MOS-UI-133's nine rows, in order, all nine always present. A missing check is not a pass: MOS-TRAIN-088 says the same thing about C1-C7 and MOS-EVID-035 about L1-L5, and an array that could be short is an array a client will read as 'everything that applied'.",
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/check"}
+    },
+    "refusals": {
+      "description": "Populated on REFUSED, empty otherwise. One entry per blocking check that failed, in the engine's own shape.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/refusal"}
+    },
+    "dataset_version_id": {
+      "description": "Null until SUCCEEDED. MOS-UI-131 requires the complete battery to run BEFORE anything is created, and MOS-UI-132 makes the outcome atomic from the operator's view: a REFUSED run leaves this null and no row behind, because a DatasetVersion that seals and then fails its split freeze is immutable (MOS-EVID-013), undeletable (MOS-API-011 returns 409 DATASET_VERSION_SEALED) and useless to the operator this surface exists for.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "dataset_split_id": {
+      "description": "Null until SUCCEEDED, and non-null whenever dataset_version_id is: MOS-UI-132 admits exactly two outcomes, both objects or neither, and a response carrying one of the two is the partial outcome MOS-UI-160 requires be reported as a platform fault rather than as something the operator did.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "manifest_digest": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "split_digest": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "corpus_stratification_report_id": {
+      "description": "MOS-TRAIN-088 requires the FULL C1-C7 result to be recorded whether it passes or blocks, and medos/medos/training/curation.py records it before it raises for exactly that reason: a fail that blocked without leaving a record would make the most informative outcome the only one with no evidence. So this is non-null on a REFUSED run as well as on a SUCCEEDED one, and row R5 serves what it names.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "reused": {
+      "description": "MOS-TRAIN-209: sealing is idempotent on CONTENT, so re-running after a fix reuses the identity rather than minting a second one for the same bytes. True says the DatasetVersion named above already existed. Reported rather than hidden, because an operator who fixed nothing and sealed twice needs to see that the second seal produced no new object.",
+      "type": "boolean"
+    },
+    "submitted_by": {
+      "description": "The principal that submitted, from the credential. Not a request member: MOS-TRAIN-080's 'named human' is worth nothing if the caller may name someone else.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "submitted_at": {"type": "string", "format": "date-time"},
+    "started_at": {"type": ["string", "null"], "format": "date-time"},
+    "finished_at": {"type": ["string", "null"], "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "description": "A SUCCEEDED run names both objects. The condition MOS-UI-132 states, expressed where a client can rely on it.",
+      "if": {
+        "properties": {"state": {"const": "SUCCEEDED"}},
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "dataset_version_id": {"type": "string"},
+          "dataset_split_id": {"type": "string"},
+          "manifest_digest": {"type": "string"},
+          "split_digest": {"type": "string"}
+        }
+      }
+    },
+    {
+      "description": "A REFUSED run says what it refused. MOS-UI-105 requires the `why` part to be the actual observed values and the actual bound, never a restatement of the rule in the abstract, and a refusal document with no refusals in it cannot produce one.",
+      "if": {
+        "properties": {"state": {"const": "REFUSED"}},
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {"refusals": {"minItems": 1}}
+      }
+    }
+  ],
+  "$defs": {
+    "check": {
+      "title": "Seal check outcome",
+      "description": "One row of MOS-UI-133's table, as run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "order",
+        "check_id",
+        "covers",
+        "owner",
+        "blocking",
+        "cheap_to_preview",
+        "outcome",
+        "skipped_reason",
+        "operator_disclosure",
+        "series_evaluated",
+        "series_skipped_structural",
+        "series_without_pixel_evidence"
+      ],
+      "properties": {
+        "order": {
+          "description": "MOS-UI-133's Order column. Fixed, because the order is the requirement's content: the cheap checks run first so that MOS-UI-134's 'the seal screen MUST NOT be the first place a cohort's failure becomes visible' has a chance of holding.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9
+        },
+        "check_id": {
+          "description": "The ROW of MOS-UI-133, not the individual check: rows 2, 3 and 6 each group several, and grouping them is how the requirement is written. The individual ids are in `covers`.",
+          "type": "string",
+          "enum": [
+            "geometry_admissibility",
+            "corpus_composition_blocking",
+            "corpus_composition_warning",
+            "test_partition_floor",
+            "seeded_annotation_ceilings",
+            "leakage_key_set_disjointness",
+            "leakage_pixel_identity",
+            "leakage_near_duplicate",
+            "acceptance_binding"
+          ],
+          "x-medicalos-enum": "closed"
+        },
+        "covers": {
+          "description": "The individual check ids this row ran -- C1, C4, L3 and so on -- so that a console keying its refusal copy on a check id has the id and does not have to derive it from the row name. Register entry 84 records that `check_id` already carries two disjoint vocabularies across this platform; this member keeps the two apart on this surface rather than adding a third reading of one field.",
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        },
+        "owner": {
+          "description": "MOS-UI-133's Owner column: the requirement that owns the check. A requirement identifier, so MOS-UI-101 keeps it out of operator copy and MOS-UI-105 puts it in the collapsed technical region.",
+          "type": "string",
+          "pattern": "^MOS-[A-Z]+-[0-9]{3}$"
+        },
+        "blocking": {
+          "description": "MOS-UI-133's Blocking column. MOS-UI-145 requires a warn to be displayed, not to block, and NOT to be rendered in the visual register of a refusal: MOS-TRAIN-092 draws the distinction precisely -- C4 and C6 describe a corpus that is narrow, the rest describe a corpus that cannot support the claim being made from it -- and a warning styled like a block teaches the operator to ignore blocks.",
+          "type": "boolean"
+        },
+        "cheap_to_preview": {
+          "description": "MOS-UI-133's column of the same name, and MOS-UI-134's obligation: every cheap check MUST already have been displayed in the composition panel before the operator reaches the seal screen. False on rows 7 and 8 only -- L3 and L4 need per-series pixel digests and a 64-bit dHash over normalised mid-axial slices.",
+          "type": "boolean"
+        },
+        "outcome": {
+          "description": "Four values. `skipped` is a first-class outcome and not a flavour of pass: MOS-EVID-037 requires a series with fewer than three instances to be SKIPPED with an explicit reason rather than silently passed, and requires the same of a cohort whose records carry no perceptual hash. A `skipped` blocking check does not block -- MOS-EVID-034 blocks on `fail` -- which is exactly why it has to be visible.",
+          "type": "string",
+          "enum": ["pass", "fail", "warn", "skipped"],
+          "x-medicalos-enum": "closed"
+        },
+        "skipped_reason": {
+          "description": "MOS-EVID-037's 'explicit reason'. Required and non-trivial when the outcome is `skipped`; null otherwise. The engineer-facing half.",
+          "type": ["string", "null"],
+          "minLength": 20
+        },
+        "operator_disclosure": {
+          "description": "WHAT THE SKIP COSTS, in the operator's vocabulary, and the reason this response can be trusted by someone with no terminal. MOS-UI-105 fixes the register: no requirement id, no check id, no field name, no digest, no UID. MOS-UI-109 requires the copy to be a pinned string selected by identifier, so this member carries the platform's statement of the consequence and the console renders its own words beside it; what it MUST NOT do is render a skipped check as a check that ran. Required and non-trivial when the outcome is `skipped`; null otherwise.",
+          "type": ["string", "null"],
+          "minLength": 40
+        },
+        "series_evaluated": {
+          "description": "Series this check actually examined.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "series_skipped_structural": {
+          "description": "Series skipped for a property of the images rather than a property of the run -- MOS-EVID-037's fewer-than-three-instances rule is the only one today. This may coexist with `pass`, because the engine's L4 reports pass over the eligible remainder, and MOS-UI-144 requires the console to show the skip rather than a pass for the series concerned.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "series_without_pixel_evidence": {
+          "description": "Series this check could not examine because no pixel-derived value was retrieved for them. Zero for the seven checks that need no pixels. THIS IS THE FIELD THAT MAKES THE DISCLOSURE STRUCTURAL: a check cannot report `pass` while this is non-zero, so a seal run over a cohort whose images were never fetched cannot be rendered as one that passed L3 or L4. Only the `pass` direction is constrained -- a `fail` found among the series that WERE hashed is a real finding and suppressing it in favour of `skipped` would hide a genuine leak.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "detail": {
+          "description": "The check's own statistic, verbatim from the implementation that produced it: the C1 site share and its bound, the L4 Hamming pairs, the per-cell envelope counts. MOS-UI-105 puts it in the collapsed technical region and MOS-UI-107 requires the console to compute the remedy FROM it rather than describe the constraint.",
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "description": "MOS-EVID-037 and MOS-UI-144: a skip is stated, and what it costs is stated with it.",
+          "if": {
+            "properties": {"outcome": {"const": "skipped"}},
+            "required": ["outcome"]
+          },
+          "then": {
+            "required": ["skipped_reason", "operator_disclosure"],
+            "properties": {
+              "skipped_reason": {"type": "string"},
+              "operator_disclosure": {"type": "string"}
+            }
+          }
+        },
+        {
+          "description": "A check cannot pass over series it never saw.",
+          "if": {
+            "properties": {"outcome": {"const": "pass"}},
+            "required": ["outcome"]
+          },
+          "then": {
+            "properties": {"series_without_pixel_evidence": {"const": 0}}
+          }
+        },
+        {
+          "description": "MOS-UI-145 and MOS-TRAIN-092: only C4 and C6 warn, and they are the row this schema marks non-blocking. A blocking check that returned `warn` would be a block rendered in the register of a note.",
+          "if": {
+            "properties": {"outcome": {"const": "warn"}},
+            "required": ["outcome"]
+          },
+          "then": {
+            "properties": {"blocking": {"const": false}}
+          }
+        }
+      ]
+    },
+    "refusal": {
+      "title": "Seal refusal",
+      "description": "One blocking failure, in the shape medos/medos/evidence/errors.py::Refusal already emits. `code` is the discriminator a console keys its pinned copy on and `check_id` carries a requirement or check identifier -- the two are NOT interchangeable, and confusing them is the defect register entry 83 records, in which a console keyed on the wrong one rendered requirement ids and a database column name into the sentence a clinician reads.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "check_id", "message"],
+      "properties": {
+        "code": {
+          "description": "The machine discriminator. MOS-UI-108 requires refusal copy to be declared as frozen data keyed on it, and MOS-UI-109 forbids the text being generated at render time.",
+          "type": "string",
+          "minLength": 1
+        },
+        "check_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "description": "The engine's own prose. Correctly written for an engineer, which is precisely why register entry 85 records that it MUST NOT be rendered verbatim as operator copy or used as a heading -- doing so is how 'tenants.training_use_allowed is false' reached a clinician-facing screen once already.",
+          "type": "string"
+        },
+        "observed": {
+          "description": "The actual measured value. MOS-UI-105's `why` part MUST be the actual observed value and the actual bound, never a restatement of the rule in the abstract.",
+          "type": ["string", "number", "boolean", "array", "object", "null"]
+        },
+        "bound": {
+          "type": ["string", "number", "boolean", "array", "object", "null"]
+        },
+        "detail": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

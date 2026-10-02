@@ -1,0 +1,54 @@
+{
+  "allowed_patch_batch_sizes": [
+    1,
+    2,
+    4
+  ],
+  "artifact_digest": "sha256:5ccfa9d11659ec5e0c9562e0c9015f892f1b3779ef0a12c3032b088956fd70c5",
+  "artifact_filename": "model.onnx",
+  "backend": "onnxruntime_onnx",
+  "built_for": {
+    "backend": "onnxruntime_onnx",
+    "onnx_opset": 13,
+    "precision": "fp32"
+  },
+  "input_dims": [
+    -1,
+    1,
+    16,
+    16,
+    16
+  ],
+  "input_name": "INPUT__0",
+  "model_id": "medos.selftest-affine",
+  "model_version": "1.0.0",
+  "output_dims": [
+    -1,
+    1,
+    16,
+    16,
+    16
+  ],
+  "output_name": "OUTPUT__0",
+  "preprocessing_version": "1.0.0",
+  "selftest": {
+    "batch": 2,
+    "input_filename": "golden_patch_batch2.fp32.bin",
+    "input_seed": 20260914,
+    "input_shape": [
+      2,
+      1,
+      16,
+      16,
+      16
+    ],
+    "note": "Platform self-test model. NOT a clinical capability: no EvaluationRun, no cohort, no AcceptanceCriteria. See medos/medos/inference/selftest.py.",
+    "output_sha256": "sha256:ba40c546296925bc1d3387d0864c75c38a9bedc14d7a92c9aee8d2077eb70160"
+  },
+  "weights_bytes": 269,
+  "workspace_bytes_by_patch_batch": {
+    "1": 32768,
+    "2": 65536,
+    "4": 131072
+  }
+}

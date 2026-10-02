@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/annotation-set/1.0.0.json",
+  "title": "AnnotationSet",
+  "description": "The wire form of one annotation_sets row with its annotation_readers rows (0006_evidence.up.sql sections 7 and 8): chapter 7 section 7.5's frozen reference standard. Response body of table 10.2-B rows R29 and R31, item type of row R30. It is the third of the three ids POST /api/v1/training-runs binds (MOS-TRAIN-124, MOS-EVID-040), and the readers are projected rather than reduced to a count because MOS-EVID-043 requires inter-reader agreement in every report citing a multi-reader set and MOS-UI-125 requires the console to have said so before the campaign started. There is no PATCH and no DELETE on this resource: MOS-TRAIN-110 makes adding a reader or a case a NEW set bound to the same DatasetVersion, and annotation_sets_frozen refuses the other reading.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "annotation_set_id",
+    "public_id",
+    "dataset_version_id",
+    "name",
+    "capability_id",
+    "label_definition_id",
+    "annotation_type",
+    "consensus_rule",
+    "consensus_params",
+    "reader_count",
+    "readers",
+    "reference_of_record",
+    "annotation_digest",
+    "frozen_at",
+    "frozen_by"
+  ],
+  "properties": {
+    "annotation_set_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "public_id": {
+      "type": "string",
+      "pattern": "^ann_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "dataset_version_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "name": {"type": "string", "minLength": 1},
+    "capability_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "label_definition_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "annotation_type": {
+      "type": "string",
+      "enum": ["mask", "bounding_box", "point", "case_label", "measurement"],
+      "x-medicalos-enum": "closed"
+    },
+    "consensus_rule": {
+      "type": "string",
+      "enum": [
+        "single_reader",
+        "majority_at_least_2",
+        "union",
+        "intersection",
+        "staple",
+        "arbitrated"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "consensus_params": {
+      "description": "Projected in full, including staple's rng_seed: MOS-TRAIN-105 requires the reduction to be reproducible from the persisted per-reader masks alone, and a parameter recorded in a column nobody serves is a parameter nobody can reproduce from.",
+      "type": "object"
+    },
+    "reader_count": {
+      "description": "MOS-EVID-038: at least one. annotation_sets_single_reader and annotation_sets_majority tie it to the consensus rule in the database as well as in medos/medos/evidence/repo.py.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "readers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reader_id", "role"],
+        "properties": {
+          "reader_id": {
+            "description": "The MedicalOS User principal. A principal id and not a name: MOS-API-006 forbids a direct identifier in a response body, and a reader's name is one.",
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["radiologist", "resident", "algorithm", "registry_extract"],
+            "x-medicalos-enum": "closed"
+          },
+          "years_experience": {"type": ["integer", "null"], "minimum": 0},
+          "board_certified": {"type": ["boolean", "null"]},
+          "specialty": {"type": ["string", "null"]},
+          "tool": {
+            "description": "Filled by the platform from the deployed annotation stack, never typed by the operator (MOS-UI-124).",
+            "type": ["string", "null"]
+          },
+          "instructions_uri": {"type": ["string", "null"]},
+          "blinded_to": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "reference_of_record": {
+      "description": "MOS-EVID-042. False on a set any of whose readers has role `algorithm`: an algorithmic reference standard is never the reference of record, and medos/medos/evidence/repo.py refuses the combination at freeze rather than letting an AcceptanceCriteria gate discover it later.",
+      "type": "boolean"
+    },
+    "annotation_digest": {
+      "description": "Chapter 7's annotation_digest; section 12.12 spells the column manifest_digest. MOS-TRAIN-124 binds it onto the TrainingRun and MOS-TRAIN-140 requires the candidate EvaluationRun to carry the same one, which is what makes 'fitted and evaluated against the same reference standard' checkable rather than asserted.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "frozen_at": {"type": "string", "format": "date-time"},
+    "frozen_by": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    }
+  }
+}

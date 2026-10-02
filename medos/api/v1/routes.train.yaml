@@ -1,0 +1,1546 @@
+# SPDX-License-Identifier: Apache-2.0
+# =====================================================================================
+# medos/api/v1/routes.train.yaml -- the model-preparation service's route registry.
+#
+# ONE OF TWO. `medos/api/v1/routes.core.yaml` carries the PACS-and-models service's. See that
+# file's header for why they are separate; briefly, `medos/tools/permcheck.py` checks each
+# against its own app, and one registry could only ever be right about one of them.
+#
+# THIS FILE CARRIES THE SCHEMAS AND THE PROBLEM TYPES -- all of them -- because all of
+# them were the training surface's: 34 schemas, 7 `api_problem_types` every one of
+# which is minted by `medos/medos/api/routes_curation.py`, and 8 `training_problem_types`.
+# Core referenced none.
+#
+# `minted_by` still names files under `medos/medos/api/`, and `medos/tools/permcheck.py` still
+# requires that. The two routers live there because moving them into `medos/medos/training/`
+# would open the promotion edge `MOS-TRAIN-189` keeps closed; the argument is in
+# `medos/medos/api/training_plane.py`.
+# =====================================================================================
+
+version: v1
+
+# -------------------------------------------------------------------------------------
+# Schema name -> file. MOS-API-084 makes `schemas/` the single source of truth for every
+# request body, response body, event payload and problem extension, one file per type
+# with an absolute `$id` under https://spec.medicalos.org/schemas/v1/. Only the training
+# surface has its files written; `schemas_pending` is every other name this file uses.
+# The index is explicit rather than derived from the name, because a resolution rule
+# that guesses a path silently resolves to nothing when the guess is wrong.
+# -------------------------------------------------------------------------------------
+
+schemas:
+  HarvestBatchCreateRequest: schemas/training/harvest-batch-create-request-1.0.0.json
+  HarvestBatch: schemas/training/harvest-batch-1.0.0.json
+  CurationDecisionRequest: schemas/training/curation-decision-request-1.0.0.json
+  CurationDecision: schemas/training/curation-decision-1.0.0.json
+  TrainingDataPolicyPutRequest: schemas/training/training-data-policy-put-request-1.0.0.json
+  TrainingDataPolicy: schemas/training/training-data-policy-1.0.0.json
+  CorpusStratificationReport: schemas/training/corpus-stratification-report-1.0.0.json
+  TrainingRunSubmitRequest: schemas/training/training-run-submit-request-1.0.0.json
+  TrainingRun: schemas/training/training-run-1.0.0.json
+  Page<TrainingRun>: schemas/training/page-training-run-1.0.0.json
+  CapabilitySeedVariance: schemas/training/capability-seed-variance-1.0.0.json
+  SplitTestExposure: schemas/training/split-test-exposure-1.0.0.json
+  TrainingRunCandidate: schemas/training/training-run-candidate-1.0.0.json
+  ConfigurationSearchDeclareRequest: schemas/training/configuration-search-declare-request-1.0.0.json
+  ConfigurationSearch: schemas/training/configuration-search-1.0.0.json
+  ConfigurationSearchNominationRequest: schemas/training/configuration-search-nomination-request-1.0.0.json
+  ConversionRunSubmitRequest: schemas/training/conversion-run-submit-request-1.0.0.json
+  ConversionRun: schemas/training/conversion-run-1.0.0.json
+  # The corpus-assembly surface, rows R19-R31 and rows 32 and 37. `schemas/evidence/`
+  # is a second directory rather than more files under `schemas/training/`, because
+  # `DatasetVersion`, `DatasetSplit` and `AnnotationSet` are chapter 7 entities that the
+  # training surface READS and does not own -- filing them under `training/` would put
+  # chapter 7's wire contract in a directory chapter 17's changes edit.
+  SamplingPlanDeclareRequest: schemas/training/sampling-plan-declare-request-1.0.0.json
+  SamplingPlan: schemas/training/sampling-plan-1.0.0.json
+  Page<SamplingPlan>: schemas/training/page-sampling-plan-1.0.0.json
+  Page<HarvestBatch>: schemas/training/page-harvest-batch-1.0.0.json
+  HarvestCandidate: schemas/training/harvest-candidate-1.0.0.json
+  Page<HarvestCandidate>: schemas/training/page-harvest-candidate-1.0.0.json
+  SplitPreview: schemas/training/split-preview-1.0.0.json
+  SealRunSubmitRequest: schemas/evidence/seal-run-submit-request-1.0.0.json
+  SealRun: schemas/evidence/seal-run-1.0.0.json
+  DatasetSplit: schemas/evidence/dataset-split-1.0.0.json
+  AnnotationSetFreezeRequest: schemas/evidence/annotation-set-freeze-request-1.0.0.json
+  AnnotationSet: schemas/evidence/annotation-set-1.0.0.json
+  Page<AnnotationSet>: schemas/evidence/page-annotation-set-1.0.0.json
+  Dataset: schemas/evidence/dataset-1.0.0.json
+  Page<Dataset>: schemas/evidence/page-dataset-1.0.0.json
+  DatasetVersion: schemas/evidence/dataset-version-1.0.0.json
+
+# Names used below that `schemas/` does not yet carry. MOS-API-084 requires a file for
+# every one of them; writing thirty schemas for the existing surface is not this change.
+# The list is asserted to be EXACTLY the set of unresolved names, so it cannot rot.
+
+schemas_pending:
+  - ArtifactStatusRequest
+  - Attestation
+  - EventEnvelope
+  - Job
+  - JobCreateRequest
+  - ModelVersion
+  - ModelVersionCreateRequest
+  - Page<ModelVersion>
+  - Page<ResultReview>
+  - Page<ServiceVersion>
+  # `GET /users/me` responds with this and no file has been written for it yet. Listed
+  # here rather than left out, because the gate's whole subject is that the index and the
+  # pending list together account for every name the registry uses -- a name in neither is
+  # a response shape nothing in the repository describes.
+  - Principal
+  - RecallImpact
+  - ResultReview
+  - ResultReviewAssignRequest
+  - ResultReviewReopenRequest
+  - ResultReviewSubmitRequest
+  - SeriesSelection
+  - ServiceVersion
+  - ServiceVersionCreateRequest
+
+# Four of those names are minted here because no chapter names them: table 10.2-B writes
+# the bodies as literal objects (`{assignee_user_id}`, `{action_rationale}`) and chapter 6
+# section 6.11 writes the status body as a literal example. A type needs a name before it
+# can have a file, and an unnamed body is a body nobody generates.
+
+minted_schema_names:
+  - ArtifactStatusRequest
+  - RecallImpact
+  - ResultReviewAssignRequest
+  - ResultReviewReopenRequest
+
+# =====================================================================================
+# training_problem_types -- the `problems:` slugs the training rows name, against what
+# `medos.sdk/errors.py` ACTUALLY RAISES. READ THIS BEFORE IMPLEMENTING A HANDLER.
+#
+# The slugs below are not decoration: they are what a conforming client matches on
+# (`MOS-API-035` makes `type` the stable identifier), and on this surface the
+# specification and the only implementation disagree about two of the three parts of
+# every one of them. Both divergences are PLATFORM-WIDE, both are recorded, and this
+# change resolves NEITHER -- it records what the code does, which is the half a client
+# sees, and leaves the decision to the one change that can take it for all thirteen
+# problem types at once.
+#
+#   1. THE AUTHORITY. docs/spec/99-known-inconsistencies.md entry 80: the code spells
+#      twelve types `https://medicalos.dev/problems/...` and one `spec.medicalos.org`;
+#      the specification spells fifteen `spec.medicalos.org` and two `medicalos.dev`.
+#      `MOS-API-036` names `https://spec.medicalos.org/problems/` as the ONLY permitted
+#      prefix and `medos/medos/api/problems.py` carries it as `PROBLEM_BASE` -- and
+#      `medos.sdk/errors.py` does not go through that constant. `MOS-API-112` fixed
+#      one binding in advance (`training-use-not-permitted`) and
+#      `schemas/training/training-use-not-permitted-1.0.0.json` pins it as a `const`, so
+#      that one refusal is now written down twice in agreement with each other and not
+#      with the running system. Changing one constant makes the code internally
+#      inconsistent instead of externally; changing twelve is a breaking change to the
+#      wire contract of every refusal this platform emits. Entry 80 owns it.
+#   2. THE `class`. Table 10.4-A is closed at six values (`MOS-API-038`) and
+#      `medos/medos/api/problems.py WIRE_CLASSES` carries them. `HarvestRefused` and
+#      `PartitionForbidden` render `class: authorization`, WHICH IS NOT ONE OF THE SIX;
+#      the registered spelling is `authz_error` and `MOS-API-112` pins it for
+#      `training-use-not-permitted`. The other three render `clinical_rejection`, which
+#      is `medos.sdk/refusal.py`'s default and is the reading CONTRACT.md section 9
+#      argues for -- a refused run is information the caller must act on, not a broken
+#      platform -- but `MOS-API-039` gives `clinical_rejection` a distinct affordance for
+#      a CLINICIAN, and whether a leaking split belongs in that register is the same
+#      one-decision question as (1). Not taken here.
+#
+# `raised_by` is asserted by importing the class, so this block cannot rot away from the
+# module: see `tests/unit/test_permission_contract.py`.
+#
+# A THIRD FINDING, RECORDED BY THE CHANGE THAT DECLARED R1-R5 AND CLOSED BY THE CHANGE
+# THAT SERVED THEM. Two slugs those rows named were not problem types and nothing could
+# raise them: `curation-decision-already-settled` (row R3) and `training-policy-required`
+# (row R4). Each is now settled, and differently, because they were wrong in different
+# ways.
+#
+#   `curation-decision-already-settled` IS A REAL TYPE NOW, and it always could have been:
+#     `medos/medos/api/problems.py::problem_type_uri` derives `type` MECHANICALLY from `code`
+#     ("one mapping rather than a hand-maintained table, because a table is how `type` and
+#     `code` drift apart"), so a handler answering 409 with code
+#     `CURATION_DECISION_ALREADY_SETTLED` emits exactly that slug. It is declared below in
+#     `api_problem_types`, together with the four other slugs `medos/medos/api/routes_curation.py`
+#     mints the same way, and `medos/tools/permcheck.py` recomputes each one from its `code` --
+#     so the block cannot drift from the handler any more than the handler can drift from
+#     `problem_type_uri`.
+#   `training-policy-required` IS NOT A TYPE AND ROW R4 NO LONGER NAMES IT. It is the name
+#     of the DEFERRABLE INITIALLY DEFERRED constraint trigger in 0011_curation.up.sql and
+#     section 12.10 -- a database object. The trigger still fires at COMMIT and the
+#     handler catches it there; what reaches the wire is MOS-TRAIN-073's refusal, whose
+#     type is `training-use-not-permitted` because `HarvestRefused` raises it. R4 names
+#     that instead.
+#
+# `surface:` IS NOW SET on R1, R2, R3 and R5, which pulls their slugs under the check
+# above -- which is the point. It stays off R4: MOS-UI-110 forbids the console editing the
+# policy and MOS-UI-102 excludes the `governance` class the row's permission carries.
+
+# The problem types `medos/medos/api/` MINTS rather than raises, on the rows above that carry a
+# `surface:`. `training_problem_types` records what a refusal CLASS raises and is checked
+# by importing the class; these have no class -- they are `build_problem(code=...)` calls,
+# and `problem_type_uri` makes the slug a pure function of the code. So the check is the
+# same discipline by a different route: `medos/tools/permcheck.py` recomputes
+# `problem_type_uri(code)` for every entry here and fails when it is not this slug. A row
+# carrying a `surface:` may name a slug from this block, from `training_problem_types` or
+# from `SHARED_PROBLEMS`, and nothing else.
+
+api_problem_types:
+  sampling-plan-capability-mismatch:
+    code: SAMPLING_PLAN_CAPABILITY_MISMATCH
+    status: 409
+    class: client_error
+    minted_by: medos/medos/api/routes_curation.py::open_harvest_batch
+    why: >-
+      MOS-TRAIN-083 makes the SamplingPlan the description of the draw, so a plan declared
+      for another capability describes nothing about this batch.
+  training-policy-not-live:
+    code: TRAINING_POLICY_NOT_LIVE
+    status: 409
+    class: client_error
+    minted_by: medos/medos/api/routes_curation.py::open_harvest_batch
+    why: >-
+      The batch records the LIVE instrument so MOS-TRAIN-076 can say which candidates
+      predate a revocation. A caller that could name a revoked one could produce a batch
+      whose provenance says it predates its own revocation.
+  curation-decision-not-found:
+    code: CURATION_DECISION_NOT_FOUND
+    status: 404
+    class: client_error
+    minted_by: medos/medos/api/routes_curation.py::get_curation_decision
+    why: >-
+      Distinct from `not-found` on the CANDIDATE, because the remedies differ: one is a
+      wrong id and the other is a queue item nobody has reached. MOS-TRAIN-080 forbids
+      auto-inclusion, so undecided is backlog and never 200 with a null decision.
+  curation-decision-already-settled:
+    code: CURATION_DECISION_ALREADY_SETTLED
+    status: 409
+    class: client_error
+    minted_by: medos/medos/api/routes_curation.py::record_curation_decision
+    why: >-
+      `curation_decisions_settled_uk` is UNIQUE (candidate_id) WHERE decision <> 'defer'
+      and MOS-TRAIN-203 keeps the row. A second decision is a conflict, never an edit.
+  training-policy-already-live:
+    code: TRAINING_POLICY_ALREADY_LIVE
+    status: 409
+    class: client_error
+    minted_by: medos/medos/api/routes_curation.py::put_training_policy
+    why: >-
+      The row's terms are sealed after insert (MOS-TRAIN-073), so a PUT whose terms differ
+      from the live instrument is a withdrawal plus a new instrument and not a replace.
+      A PUT whose terms MATCH is a no-op and answers 200, which is what makes the method
+      idempotent in fact rather than in the registry.
+  corpus-stratification-report-not-found:
+    code: CORPUS_STRATIFICATION_REPORT_NOT_FOUND
+    status: 404
+    class: client_error
+    minted_by: medos/medos/api/routes_curation.py::get_harvest_batch_stratification
+    why: >-
+      A batch still being curated has not been through the C1-C7 battery. A body saying
+      `verdict: null` would read to a no-code operator as a cohort that passed nothing in
+      particular rather than one nobody has looked at -- the confusion MOS-API-112 fixes
+      structurally for SealRun.check_battery.
+  deployment-not-declared:
+    code: DEPLOYMENT_NOT_DECLARED
+    status: 503
+    class: system_failure
+    minted_by: medos/medos/api/routes_curation.py::_deployment_problem
+    why: >-
+      MOS-UI-160 separates a refusal the operator caused from one the deployment caused.
+      Nothing in the request body makes a deployment that never declared MEDOS_TENANT_SALT
+      able to compute MOS-EVID-010's patient_key. `retryable: false` is passed explicitly
+      because the default class for 503 carries `retryable: true`, which would be a lie.
+# =====================================================================================
+
+training_problem_types:
+  training-use-not-permitted:
+    raised_by: medos.sdk.errors.HarvestRefused
+    type_as_raised: https://medicalos.dev/problems/training-use-not-permitted
+    type_as_specified: https://spec.medicalos.org/problems/training-use-not-permitted
+    status: 403
+    class_as_raised: authorization
+    class_as_specified: authz_error
+    register_entry: "docs/spec/99-known-inconsistencies.md entry 80"
+  training-run-refused:
+    raised_by: medos.sdk.errors.RunRefused
+    type_as_raised: https://medicalos.dev/problems/training-run-refused
+    type_as_specified: null
+    status: 422
+    class_as_raised: clinical_rejection
+    class_as_specified: null
+    note: >-
+      MOS-UI-158's `Refused` category, and the reason it is never a `FAILED` row: the
+      leakage re-execution of MOS-TRAIN-115, the incomplete binding of MOS-TRAIN-124 and
+      the missing rationale of MOS-TRAIN-211 all refuse at submit, before the first batch
+      is loaded, so the operator sees a 422 in the console and no run is created.
+  configuration-search-refused:
+    raised_by: medos.sdk.errors.SearchRefused
+    type_as_raised: https://medicalos.dev/problems/configuration-search-refused
+    type_as_specified: null
+    status: 422
+    class_as_raised: clinical_rejection
+    class_as_specified: null
+  conversion-refused:
+    raised_by: medos.sdk.errors.ConversionRefused
+    type_as_raised: https://medicalos.dev/problems/conversion-refused
+    type_as_specified: null
+    status: 422
+    class_as_raised: clinical_rejection
+    class_as_specified: null
+  curation-refused:
+    raised_by: medos.sdk.errors.CurationRefused
+    type_as_raised: https://medicalos.dev/problems/curation-refused
+    type_as_specified: null
+    status: 422
+    class_as_raised: clinical_rejection
+    class_as_specified: null
+    note: >-
+      Everything medos/medos/training/curation.py refuses with. Row R3's slug
+      `curation-decision-already-settled` is a `code` INSIDE one of these documents and not a
+      `type`, which the block below this one has recorded since the row was written; that row
+      is now one edit from correct and the edit belongs to the change that serves R1-R5, not
+      to this one.
+  dataset-seal-refused:
+    raised_by: medos.sdk.refusal.SealRefused
+    type_as_raised: https://medicalos.dev/problems/dataset-seal-refused
+    type_as_specified: null
+    status: 422
+    class_as_raised: clinical_rejection
+    class_as_specified: null
+    note: >-
+      Chapter 7's seal refusing, as distinct from chapter 17's curation refusing. Row R26
+      names both, because MOS-UI-130 makes the seal one operator action spanning two platform
+      operations and MOS-UI-105's `what would fix it` differs between them: a blocking C-check
+      is fixed by changing the cohort, and a manifest-level refusal is not.
+  split-freeze-refused:
+    raised_by: medos.sdk.refusal.FreezeRefused
+    type_as_raised: https://medicalos.dev/problems/split-freeze-refused
+    type_as_specified: null
+    status: 422
+    class_as_raised: clinical_rejection
+    class_as_specified: null
+    note: >-
+      A FINDING, RECORDED AND NOT FIXED HERE. `FreezeRefused` is raised by BOTH
+      `medos/medos/evidence/repo.py::freeze_split` and `::freeze_annotation_set`, so an
+      AnnotationSet refused for a missing `consensus_params` renders `type:
+      .../split-freeze-refused`. MOS-API-035 makes `type` the stable identifier a conforming
+      client matches on, so the slug is wrong for half of what raises it. Splitting the class
+      is a breaking change to a wire `type` and is the same one-decision question as register
+      entry 80; row R29 names the slug the code actually emits rather than the one it should,
+      because this file records what the code does.
+  partition-not-readable:
+    raised_by: medos.sdk.errors.PartitionForbidden
+    type_as_raised: https://medicalos.dev/problems/partition-not-readable
+    type_as_specified: null
+    status: 403
+    class_as_raised: authorization
+    class_as_specified: authz_error
+    note: >-
+      MOS-TRAIN-141 fixes the status and the reason for it -- 403, not an empty set, because
+      an empty set is indistinguishable from "no such patient" and a retry loop around one
+      is how a silent read becomes a routine one. No row below lists this slug: no declared
+      route takes a partition name, which is the structural form of the same rule. It is
+      recorded because a handler that reaches medos.training.cohort.resolve() can raise it
+      and would otherwise render it as an unhandled 500.
+
+coverage:
+  # Counted over THIS file, against `medos.api.training_plane:create_training_app`.
+  # `served_entries` was 61 across the single registry and is 33 here; the other 29
+  # are in routes.core.yaml (28 at the split, plus `GET /users/me`). The table 10.2-B
+  # numbers below were unchanged by the split, because every one of them was already a
+  # statement about the model-preparation surface -- but `GET /users/me` carries table row
+  # 7, so serving it does move one row out of the debt. See the note.
+  served_entries: 33
+  reserved_entries: 0
+  table_10_2_b_served_rows: 101
+  table_10_2_b_reserved_rows: 31
+  table_10_2_b_rows_without_an_entry: 78
+  routes_served_by_medos_api_without_an_entry: 0
+  note: >-
+    78 = 101 served rows minus the 23 that have an entry here. The other 8 entries render
+    chapter 6 section 6.11 routes that table 10.2-B does not carry, which is why 28 - 20
+    is not zero and why the two counts are kept apart. `table_10_2_b_rows_without_an_entry`
+    is UNCHANGED by the change that served R18-R31: those fourteen are table 10.2-B
+    RESERVED rows and rows 32 and 37 already had entries, so serving them moves no row
+    out of the debt. That is the honest arithmetic and it is worth saying plainly -- the
+    surface got substantially larger and MOS-API-085's shortfall did not shrink by one.
+    `GET /users/me` is the first change since that did: it carries table row 7, which had
+    no entry before, so the count above went 79 -> 78. One row, and it is the difference
+    between the debt being static and the debt being worked down.
+    served_entries rises from 56 to 61 and reserved_entries falls from 5 to ZERO: the
+    twelve R6-R17 rows served by medos/medos/api/routes_training.py, the fourteen R18-R31 rows
+    and the two existing rows 32 and 37 served by medos/medos/api/routes_curation.py, the
+    28 that were served before, and now MOS-API-112's R1-R5 in that same module. A table
+    10.2-B row's RESERVED/SERVED classification stays chapter 10's and `status:` stays
+    this deployment's; conflating the two would make the debt look smaller than it is,
+    which is why `table_10_2_b_reserved_rows` still counts every R-row and did not move.
+    NOTHING IN THIS FILE IS RESERVED ANY MORE, and that is the whole of the R-series: a
+    browser can now record the policy, declare the plan, open the batch, read and decide
+    the queue, read the stratification report, preview the split, seal, poll, freeze the
+    split and the reference standard, and submit a training run. Every number here is
+    recomputed from the files and from the running ASGI app by
+    tests/unit/test_permission_contract.py, so none of them can be improved by editing
+    this block.
+routes:
+  # ---------------------------------------------------------------------------------
+  # The training surface. Table 10.2-B rows R1-R5 -- MOS-API-112's five, SERVED since the
+  # change that wrote `medos/medos/api/routes_curation.py`'s R1-R5 block.
+  #
+  # WHAT CHANGED, AND IT IS NOT A LICENCE ANYBODY GRANTED THEMSELVES. These five carried
+  # `status: reserved` on a sentence that read "MUST NOT be served until a handler is
+  # registered", which forbids serving them until they are served, and cited MOS-API-089,
+  # which carries no reservation clause at all. docs/spec/99-known-inconsistencies.md
+  # entry 88 records the circularity and MOS-API-112 as amended states the correction in
+  # terms: "these five are unserved because no handler exists, and the change that
+  # registers one against the `permission:` value of its own row serves them." The three
+  # preconditions that requirement DID set were discharged by 5cb96fb -- a row in table
+  # 10.2-B, a schema in `schemas/`, a catalogue key in medos/contracts/permissions.yaml -- and
+  # this block adds nothing to them but the handler.
+  #
+  # `surface:` IS SET ON R1, R2, R3 AND R5 AND IS DELIBERATELY ABSENT ON R4. The four are
+  # the console's own screens: the cohort draw of 19.3.2, the curation queue of 19.3.3 and
+  # the composition panel MOS-UI-116 requires to come from the server. R4 is not, and
+  # MOS-UI-110 is why -- the console MUST NOT offer a screen that edits the policy,
+  # because "the assertion it records is the site's legal one, not this operator's" --
+  # and `training_data_policy.record` is a `governance`-class key, which MOS-UI-102
+  # excludes from the surface outright. A `surface:` on R4 would say the opposite of both.
+  #
+  # MOS-API-022 enumerates the rows on which `Idempotency-Key` is REQUIRED -- 15, 29,
+  # 36, 38, 42, 46, 51, 55, 62, 68b, 71a -- and does not reach R1 or R3. Both stay
+  # `optional`, which is MOS-API-022's default for an unsafe method, and a handler MUST
+  # NOT enforce a rule chapter 10 has not written: answering 400 IDEMPOTENCY_KEY_REQUIRED
+  # here would break a conforming client. WHAT THE HANDLERS NOW DO HONOUR is that
+  # requirement's second sentence, which is a MUST and reaches every unsafe method --
+  # "when absent the server MUST generate one and MUST echo it in
+  # `MedicalOS-Idempotency-Key`" -- on R1 and R3 and on R19, R26 and R29, which had been
+  # serving without it. Making the key REQUIRED on the two creating rows is an edit to
+  # MOS-API-022's enumeration, which chapter 10 owns; the residual exposure is that R1 can
+  # open two batches from two deliveries of one request, and an echoed key is not a
+  # remembered one. R3 cannot double-decide (`curation_decisions_settled_uk` answers 409)
+  # and R4 is a PUT whose second identical call is a no-op by construction.
+  # ---------------------------------------------------------------------------------
+  - operation_id: openHarvestBatch
+    method: POST
+    path: /harvest-batches
+    summary: Open a harvest batch against a sealed sampling plan and draw its candidates
+    permission: harvest_batch.open
+    idempotency: optional
+    status: served
+    surface: training_console
+    table_row: R1
+    defined_by: MOS-API-112
+    entity_owner: MOS-TRAIN-078
+    engine: medos.training.curation.open_batch
+    engine_also: medos.training.curation.add_candidate
+    request:
+      media_type: application/json
+      schema: HarvestBatchCreateRequest
+    responses:
+      "201":
+        schema: HarvestBatch
+        headers: [Location, MedicalOS-Idempotency-Key]
+    problems: [schema-violation, training-use-not-permitted, curation-refused, deployment-not-declared, sampling-plan-capability-mismatch, training-policy-not-live, not-found, cross-tenant-denied, rate-limited]
+    note: >-
+      The draw is the SERVER's and reads `result_provenance`, which is the only table in
+      this platform holding MOS-TRAIN-084's acquisition_profile "copied from the source
+      header without imputation". Two consequences are named in
+      medos/medos/api/routes_curation.py's THE DRAW section and neither is fixable from chapter
+      10: every candidate it produces has `ran_on_platform = true`, which is a stratum
+      MOS-TRAIN-083 requires a plan to declare and this draw can give only one value of;
+      and `score_band` collapses, because `result_provenance.operating_threshold` is NULL
+      on every row this platform has written. A draw that selects nothing is a 422
+      `curation-refused` carrying per-reason COUNTS and no UID, not an empty 201 --
+      HarvestBatch closes `additionalProperties` and has no member in which "and here is
+      why nothing matched" could be said.
+
+  - operation_id: getCurationDecision
+    method: GET
+    path: /harvest-candidates/{harvest_candidate_id}/decision
+    summary: The settled curation decision on one candidate
+    permission: harvest_candidate.read
+    idempotency: not_applicable
+    status: served
+    surface: training_console
+    table_row: R2
+    defined_by: MOS-API-112
+    entity_owner: MOS-TRAIN-079
+    responses:
+      "200":
+        schema: CurationDecision
+    problems: [not-found, curation-decision-not-found, cross-tenant-denied]
+    note: >-
+      Bound to `harvest_candidate.read` and not to a key of its own: reading the decision
+      IS reading the candidate's curation state, and a second key would be a second place
+      for the two to disagree. A candidate with no SETTLED decision answers 404 with its
+      own code and never 200 with `decision: null` -- MOS-TRAIN-080 forbids auto-inclusion,
+      so an undecided candidate is backlog, and a null a client could read as a value is
+      the shape that rule exists to prevent. A deferral is not settled either
+      (`curation_decisions_settled_uk` is UNIQUE (candidate_id) WHERE decision <> 'defer').
+
+  - operation_id: recordCurationDecision
+    method: POST
+    path: /harvest-candidates/{harvest_candidate_id}/decision
+    summary: Record a curation decision as the named human
+    permission: curation_decision.record
+    idempotency: optional
+    status: served
+    surface: training_console
+    table_row: R3
+    defined_by: MOS-API-112
+    entity_owner: MOS-TRAIN-080
+    engine: medos.training.curation.decide
+    request:
+      media_type: application/json
+      schema: CurationDecisionRequest
+    responses:
+      "201":
+        schema: CurationDecision
+        headers: [Location, MedicalOS-Idempotency-Key]
+    problems: [schema-violation, curation-decision-already-settled, curation-refused, training-use-not-permitted, not-found]
+    note: >-
+      ONE candidate per request, addressed by the path, and the body carries no array of
+      any kind. That is MOS-UI-119 made structural: the console MUST NOT offer a select
+      all and include control "that writes decisions without the cases having been
+      shown", and a `decisions[]` member would be that control with an HTTP client in
+      front of it. `decided_by` is not a body member either -- MOS-TRAIN-080's named human
+      is the authenticated principal. There is no route to
+      `medos.training.curation.auto_exclude`: MOS-TRAIN-205 requires the predicate's
+      serialised SOURCE with it, and a predicate a client supplies is a human judgement
+      represented as if it had one.
+
+  - operation_id: putTenantTrainingPolicy
+    method: PUT
+    path: /tenants/{tenant_id}/training-policy
+    summary: Record the tenant's TrainingDataPolicy and set training_use_allowed
+    permission: training_data_policy.record
+    idempotency: not_applicable
+    status: served
+    table_row: R4
+    defined_by: MOS-API-112
+    entity_owner: MOS-TRAIN-073
+    engine: medos.training.policy.record_policy
+    engine_also: medos.training.policy.set_training_use_allowed
+    request:
+      media_type: application/json
+      schema: TrainingDataPolicyPutRequest
+    responses:
+      "200":
+        schema: TrainingDataPolicy
+    problems: [schema-violation, training-use-not-permitted, training-policy-already-live, not-found, cross-tenant-denied]
+    note: >-
+      NO `surface:`, and that absence is MOS-UI-110 and MOS-UI-102 together. This is the
+      one `governance`-class key the training rows bind, deliberately off the console.
+      `training-policy-required` was named here before a handler existed and is NOT a
+      problem type: it is the name of the DEFERRABLE INITIALLY DEFERRED constraint trigger
+      in 0011_curation.up.sql. The trigger still fires -- at COMMIT, which is why the
+      handler catches the integrity error there -- and what travels on the wire is
+      MOS-TRAIN-073's refusal, whose type is `training-use-not-permitted` because
+      `medos.sdk.errors.HarvestRefused` raises it. Repointed here rather than left,
+      which is one of the two things the `training_problem_types` block said this change
+      owed. `idempotency: not_applicable` because PUT is idempotent by METHOD, and the
+      handler makes that true rather than assuming it: a repeat of the same terms sets the
+      flag and returns the live row, and terms that DIFFER are 409, because the row's
+      sealing trigger forbids editing them and a correction is a withdrawal plus a new
+      instrument, by two people who each meant it.
+
+  - operation_id: getHarvestBatchStratification
+    method: GET
+    path: /harvest-batches/{harvest_batch_id}/stratification
+    summary: The corpus stratification report recorded on a batch
+    permission: corpus_stratification_report.read
+    idempotency: not_applicable
+    status: served
+    surface: training_console
+    table_row: R5
+    defined_by: MOS-API-112
+    entity_owner: MOS-TRAIN-088
+    responses:
+      "200":
+        schema: CorpusStratificationReport
+    problems: [not-found, corpus-stratification-report-not-found, cross-tenant-denied]
+    schema_divergence: >-
+      A FINDING AGAINST THE SCHEMA, NOT AGAINST THE HANDLER, AND NOT PAPERED OVER.
+      `schemas/training/corpus-stratification-report-1.0.0.json` types every check's
+      `observed` and `bound` as `number` and closes the check object at
+      {statistic, observed, bound, outcome, waiver?}. `medos/medos/evidence/stratification.py`
+      emits an OBJECT for C4 -- {distinct, p90_over_p10} against {min_distinct,
+      max_p90_over_p10} -- and `null` for C5 where no thin-slice subset applies, and it
+      also emits `id` and `detail` on every check and a fifth `outcome` value, `waived`.
+      The handler carries `observed` and `bound` through EXACTLY as computed, because
+      MOS-TRAIN-088 asks for "the full result and not the verdict" and a reader cannot see
+      a margin in a number invented to fit a type; it drops `id` (the key carries it),
+      drops `detail` (no member exists), and projects `waived` as `warn` WITH the
+      MOS-TRAIN-091 waiver object attached, which is what that requirement's "MUST NOT
+      block" and "MUST be reproduced in full" together say. So C4 -- and C5 when it is
+      n/a -- do not satisfy this row's own schema. Widening the schema is chapter 10's and
+      chapter 17's; tests/integration/test_api_curation.py pins the divergence by name so
+      that fixing it turns red.
+
+  # ---------------------------------------------------------------------------------
+  # The training-run surface. Table 10.2-B rows R6-R12, discharging chapter 19 sections
+  # 19.3.5 (Train), 19.3.6 (Evaluate) and 19.3.7 (Promote).
+  #
+  # WHY THESE ROWS EXIST AT ALL. docs/spec/99-known-inconsistencies.md entry 79: chapter
+  # 19 specifies the Train screen exhaustively and names no endpoint; chapter 17 owns
+  # `TrainingRun`, the `Orchestrator` port and the three-act promotion AS ENTITIES;
+  # chapter 10 carried nothing -- a search of 10-api.md for training-runs returned 0.
+  # MOS-API-112's four reserved paths cover 19.3.2 and 19.3.4 and stop there, so a console
+  # built on them could assemble and seal a dataset and then not start a run. Entry 79
+  # names what is needed -- rows for `TrainingRun`, `ConfigurationSearch`, `ConversionRun`
+  # and the promotion surface, with the schemas and permissions MOS-API-112 established as
+  # the precondition pattern -- and these twelve rows plus R13-R17 are that.
+  #
+  # THREE DECISIONS, ARGUED, BECAUSE EACH COULD REASONABLY HAVE GONE THE OTHER WAY
+  # -------------------------------------------------------------------------------
+  # 1. WHAT TRAIN IS. One unsafe route, `POST /training-runs`, with a four-member body.
+  #    MOS-UI-147: "a single action with no configuration ... the cohort, the split, the
+  #    reference standard and the target capability as a read-only summary, and one
+  #    control." Those four are exactly the four ids the body carries. MOS-TRAIN-124
+  #    requires the run to bind some twenty further inputs and EVERY ONE OF THEM IS
+  #    SERVER-DERIVED, on one argument applied uniformly: a value a client may supply is a
+  #    value a client may supply wrongly, and MOS-TRAIN-126's whole claim for the record is
+  #    that these are "recorded rather than asserted" -- a client-supplied `hardware.gpu_model`
+  #    is an assertion wearing a record's clothes, and it ends up in a `ValidationReport`.
+  #    The two members that are NOT in the body are the load-bearing ones:
+  #      `hyperparameters` -- MOS-TRAIN-224 puts the training batch size in it and
+  #        MOS-UI-149 forbids revealing that quantity as editable, as a default, or behind
+  #        an "advanced" region. With no such member and `additionalProperties: false`, a
+  #        no-code client cannot reach any of MOS-UI-149's six quantities under any name.
+  #        This is the difference between a screen that does not offer a control and an API
+  #        on which the control does not exist.
+  #      `fit_partition` / `select_partition` -- MOS-TRAIN-141's rule, on the wire. The
+  #        cohort resolver "takes a split id and a partition name and nothing else", and
+  #        `medos/medos/training/cohort.py reject_location_argument()` refuses a path, a bucket
+  #        prefix and a glob for the stated reason that "a container that can name its own
+  #        data can name the test partition". A request body that named a partition would
+  #        be that container with an HTTP client in front of it.
+  #    The ONE optional member is `training_backend`, and MOS-UI-148 is why it is optional
+  #    rather than absent or enumerated-to-two. Absent: MOS-TRAIN-211 contemplates a
+  #    hand-configured run as a legitimate expert act requiring a 20-character rationale,
+  #    and a body with no backend member leaves that rule nowhere on the wire. Enumerated
+  #    to `nnunet`/`auto3dseg`: the next client that needs a hand-configured run gets it by
+  #    widening the enum, and the rationale rule is re-decided by whoever does that.
+  #    Optional, with the `monai_supervised` / `backend_rationale` biconditional in the
+  #    schema, satisfies MOS-UI-148 structurally -- the console omits the member and gets
+  #    the auto-configuring backend the fingerprint chooses -- and makes a `monai_supervised`
+  #    body without a rationale a 422 before a connection is opened. It is the same
+  #    biconditional 0013 carries as `training_runs_rationale_only_when_hand_configured`.
+  #
+  # 2. WHETHER EVALUATE IS A PATH. IT IS NOT. 19.3.6 is titled "Evaluate -- automatic,
+  #    against the locked test partition" and MOS-UI-162 says it "MUST be automatic on
+  #    `state = SUCCEEDED`" and "MUST NOT be an action the operator initiates".
+  #    MOS-TRAIN-138 registers the bundle and MOS-TRAIN-140 creates the candidate
+  #    `EvaluationRun` on `partition: "test"` with the same `split_digest` and
+  #    `annotation_digest` the run was fitted against -- both inside the pipeline, neither
+  #    with a client. Row 42 (`POST /evaluations`) exists and is NOT this path: a second
+  #    create route for the candidate run would be two ways to spend the one consumable
+  #    MOS-TRAIN-216 counts, and MOS-UI-162 forbids the console offering a partition,
+  #    cohort, metric or threshold chooser at all. So 19.3.6 gets zero action rows. What it
+  #    gets is R11, because the counter MOS-TRAIN-216 requires the platform to maintain and
+  #    MOS-UI-163 requires the console to display had no path in any chapter either.
+  #
+  # 3. WHAT 19.3.7 GETS. ONE READ, R12, AND NOTHING THAT ACTS. The full argument is in
+  #    `schemas/training/training-run-candidate-1.0.0.json`; in short: MOS-UI-167 requires
+  #    the promotion control to be ABSENT rather than disabled, MOS-TRAIN-003 says the
+  #    pipeline MUST NOT BE CAPABLE of a state beyond `VALIDATED`, MOS-TRAIN-008 puts
+  #    `VALIDATED -> APPROVED` in a named human's hands, and MOS-SEC-158 enforces that by
+  #    the absence of the grant rather than by a check in code. An approval route here
+  #    would be that grant, written down. A DOSSIER route was considered and rejected:
+  #    MOS-TRAIN-011 requires the promotion decision to be made against the full evidence
+  #    set and MOS-UI-170 puts the dossier in 19.5 on a different surface, under the
+  #    separation of duties that keeps it there, saying in terms that 19.3.7 "adds no path
+  #    to it". R12 is therefore a thin projection -- id, status, verdict, exposure count,
+  #    and the name of the permission that decides -- with no link, no action and no
+  #    deployment reference, because MOS-UI-168 requires the terminal state to be rendered
+  #    and the deciding role NAMED, and a console that joined rows 30 and 43 itself would
+  #    render a state no server asserted (MOS-UI-116's argument, one screen along).
+  #
+  # WHAT THE CHANGE THAT SERVES THESE ROWS MUST NOT DO, so that `no-auto-promote` stays
+  # green (tests/gate/test_no_auto_promote.py):
+  #   - it MUST NOT put a handler for any of these rows inside `medos/medos/training/`. Check 1
+  #     asserts the import closure of `medos.training` reaches neither `medos.promotion`
+  #     nor `medos.evidence.deployment`; a router that imports both the engine and the
+  #     registry belongs in `medos/medos/api/`, where it already is for every other surface.
+  #   - it MUST NOT put a scheduler, a watcher or an alert callback in the same module as
+  #     `runs.submit`. Check 4 greps `medos/medos/` and `deploy/` for the ASSEMBLY -- a scheduler
+  #     token and a training/promotion entrypoint token in one file -- because MOS-TRAIN-194
+  #     forbids the four-component construction in which no individual component looks
+  #     wrong. `crontab`, `APScheduler`, `celery`, `add_periodic_task`, `on_drift`,
+  #     `on_alert`, `autoretrain` and `schedule.every` are the tokens it looks for.
+  #   - it MUST NOT add a route that mutates a `Deployment` role or a `clinical_use_mode`.
+  #     MOS-UI-170 extends MOS-TRAIN-189's call-graph property to the console.
+  #
+  # PERMISSION CLASSES. MOS-UI-102 requires every action the console offers to be
+  # authorised by a permission of class `read`, `write` or `phi`, and forbids a screen, a
+  # control or a code path requiring `governance` or `clinical`. Every permission bound by
+  # R6-R12 is `read` or `write`, and none is in
+  # `medos.training.orchestrator.FORBIDDEN_PERMISSIONS` or
+  # `medos.training.candidate.FORBIDDEN_PIPELINE_PERMISSIONS`; both properties are asserted
+  # in `tests/unit/test_permission_contract.py` against those imported tuples rather than
+  # against a second copy of the list.
+  #
+  # AN OBLIGATION THIS CHANGE DOES NOT CLOSE, stated in MOS-API-112's own form. MOS-API-022
+  # enumerates the rows on which `Idempotency-Key` is REQUIRED -- 15, 29, 36, 38, 42, 46,
+  # 51, 55, 62, 68b, 71a -- and does not reach R6, R13 or R16, so three unsafe creating
+  # endpoints stand with an optional key. Widening that enumeration is chapter 10's edit to
+  # its own prose and not a row, so it is recorded here rather than assumed. The gap is
+  # narrower on R6 than it was on R1 and R3: 0013's `UNIQUE (tenant_id, run_digest)` makes a
+  # re-submission of the same binding a conflict rather than a second run, and MOS-TRAIN-124
+  # is what makes that digest mean "the same experiment".
+  #
+  # A SECOND OBLIGATION, ON CHAPTER 8. MOS-UI-102 names the seeded `evidence_scientist` role
+  # as the console's reference principal and requires CI to assert the union of the console's
+  # route permissions is a subset of it plus the harvest and curation permissions. The eight
+  # keys the run side registers are in none of section 8.3.4's seeded roles, so that subset
+  # clause cannot hold until 8.3.4 carries them. Section 8.3.4 is not this change's to edit
+  # -- this one owns 8.3.2's rows -- and there is no `roles` table to seed into either
+  # (0004_auth.up.sql created `api_keys` and stopped). Recorded, not papered over.
+  #
+  # THE CORPUS-ASSEMBLY ROWS NARROW THAT SHORTFALL RATHER THAN WIDENING IT, and the split
+  # is worth stating exactly. Seven of the eleven keys rows R18-R31 and rows 32 and 37 bind
+  # -- `dataset.read`, `dataset_version.read`, `dataset_version.create`,
+  # `dataset_split.read`, `dataset_split.freeze`, `annotation_set.read`,
+  # `annotation_set.create` -- are ALREADY inside `evidence_scientist` as MOS-UI-102 spells
+  # it (`dataset.*`, `dataset_version.*`, `dataset_split.read/freeze`, `annotation_set.*`),
+  # so the whole seal and annotation surface is inside the reference principal without
+  # section 8.3.4 changing at all. The four outside it are `training_data_policy.read`,
+  # `sampling_plan.read`, `sampling_plan.declare` and `harvest_batch.read`, and they are
+  # the same KIND of key as the harvest and curation permissions MOS-UI-102's clause already
+  # adds to the role by name -- which is an argument for amending that clause, and chapter
+  # 19 owns it.
+  # ---------------------------------------------------------------------------------
+  - operation_id: submitTrainingRun
+    method: POST
+    path: /training-runs
+    summary: Train -- one action, over a sealed cohort and a frozen split
+    permission: training_run.submit
+    idempotency: optional
+    status: served
+    table_row: R6
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-124
+    surface: training_console
+    engine: medos.training.runs.submit
+    note: >-
+      MOS-UI-151 requires the console to re-verify and display the preconditions the job
+      will itself enforce -- L1, L2, L3 and L5 against the frozen manifest, the test
+      partition floor, the seeded-annotation ceilings and code_dirty = false -- so that a
+      refusal arrives in the console rather than as a dead run. medos.training.runs.submit
+      performs the leakage and binding checks and refuses with training-run-refused; the
+      handler adds no second copy of them.
+    request:
+      media_type: application/json
+      schema: TrainingRunSubmitRequest
+    responses:
+      "202":
+        schema: TrainingRun
+        headers: [Location]
+    problems: [schema-violation, training-run-refused, training-use-not-permitted, not-found, cross-tenant-denied, rate-limited]
+
+  - operation_id: listTrainingRuns
+    method: GET
+    path: /training-runs
+    summary: List training runs
+    permission: training_run.read
+    idempotency: not_applicable
+    status: served
+    table_row: R7
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-124
+    surface: training_console
+    engine: medos.training.runs.list_runs
+    responses:
+      "200":
+        schema: Page<TrainingRun>
+    problems: [cross-tenant-denied, rate-limited]
+
+  - operation_id: getTrainingRun
+    method: GET
+    path: /training-runs/{training_run_id}
+    summary: Read one run and the reproducibility binding of MOS-TRAIN-124
+    permission: training_run.read
+    idempotency: not_applicable
+    status: served
+    table_row: R8
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-124
+    surface: training_console
+    engine: medos.training.runs.get
+    responses:
+      "200":
+        schema: TrainingRun
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: cancelTrainingRun
+    method: POST
+    path: /training-runs/{training_run_id}/cancel
+    summary: Orchestrator.Cancel, as a deliberate act attributed to a person
+    permission: training_run.cancel
+    idempotency: optional
+    status: served
+    table_row: R9
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-122
+    surface: training_console
+    engine: medos.training.runs.cancel
+    note: >-
+      The request body is empty and that is a decision, not an omission. 0013 admits a
+      failure_reason only on FAILED, so a cancellation reason has nowhere to be stored, and
+      a field the server discards is a field a client will believe was recorded. The person
+      MOS-UI-156 requires the console to name comes from the credential and the audit event.
+      A cancel of an already-terminal run raises medos.training.runs.TrainingError, which
+      carries no problem_type, so chapter 10 has no slug for that conflict and the change
+      that serves this row owes one -- it is not listed below, because listing a slug
+      nothing can raise is the shape of declaration this file exists to refuse.
+    request:
+      media_type: application/json
+      schema: null
+    responses:
+      "200":
+        schema: TrainingRun
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: getCapabilitySeedVariance
+    method: GET
+    path: /capabilities/{capability_id}/seed-variance
+    summary: Whether the capability has a seed-variance characterisation, and what it is
+    permission: training_run.read
+    idempotency: not_applicable
+    status: served
+    table_row: R10
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-127
+    surface: training_console
+    engine: medos.training.runs.seed_variance
+    note: >-
+      Bound to training_run.read rather than to capability.read although the path sits under
+      /capabilities: the row names its training_run_ids, and a principal who may not read a
+      run may not read a list of them either. MOS-API-005 binds a permission to what a route
+      reads, not to what its first path segment is called.
+    responses:
+      "200":
+        schema: CapabilitySeedVariance
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: getTrainingRunTestExposure
+    method: GET
+    path: /training-runs/{training_run_id}/test-exposure
+    summary: The test-exposure counter for this run's capability and split
+    permission: training_run.read
+    idempotency: not_applicable
+    status: served
+    table_row: R11
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-216
+    surface: training_console
+    engine: medos.training.runs.test_exposure_count
+    note: >-
+      Section 19.3.6's only row, and a read. Keyed on a run rather than on the
+      (capability_id, split_digest) pair MOS-TRAIN-216 defines the counter over, because a
+      path segment holding a digest would require the operator to compose one and MOS-UI-101
+      forbids that in any task the console offers. The pair is read off the run.
+    responses:
+      "200":
+        schema: SplitTestExposure
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: getTrainingRunCandidate
+    method: GET
+    path: /training-runs/{training_run_id}/candidate
+    summary: What became of the candidate, and who decides -- read-only
+    permission: model_version.read
+    idempotency: not_applicable
+    status: served
+    table_row: R12
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-003
+    surface: training_console
+    note: >-
+      Section 19.3.7's only row, and it acts on nothing. model_version.read is chapter 8's
+      registered spelling for reading a model version and is the one MOS-UI-102 names in the
+      evidence_scientist reference principal; rows 28, 30 and 31 bind model.read, which is a
+      catalogue-level grant and a separate question this change does not reopen. No engine
+      function is named because there is none to name: the projection reads the run, the
+      artifact and the evaluation run, and adds no act.
+    responses:
+      "200":
+        schema: TrainingRunCandidate
+    problems: [not-found, cross-tenant-denied]
+
+  # ---------------------------------------------------------------------------------
+  # ConfigurationSearch. Table 10.2-B rows R13-R15. NOT A CONSOLE SURFACE.
+  #
+  # MOS-UI-150 forbids the no-code console launching a search, and the reason is worth
+  # keeping in front of the implementer: a bounded budget, a declarative space and a
+  # nomination are three decisions the operator has no basis for making, spending a
+  # resource -- the `test` partition -- they cannot see being spent. `surface:` below says
+  # `expert` for all three, and no console route may bind these permissions.
+  #
+  # They are declared anyway because MOS-TRAIN-213 catches ANY procedure producing more
+  # than one trained artifact from one cohort and keeping a subset by a score computed on
+  # data: an AutoRunner sweep, an nnU-Net configuration comparison, a learning-rate sweep,
+  # a checkpoint-epoch choice, an ensemble-membership choice -- "whether or not the tool
+  # that performed it calls itself AutoML" -- and MOS-TRAIN-218 requires every one to
+  # produce a record. A platform that serves `TrainingRun` and not this invites the search
+  # to be run outside the API and the record to be written afterwards, which is precisely
+  # the tidier-looking and worse audit trail MOS-TRAIN-216 describes.
+  #
+  # NO LIST ROUTE, NO PATCH, NO DELETE, and each absence is a rule rather than a gap.
+  # A list route is not declared because nothing needs one yet and this file does not
+  # declare routes in anticipation. `PATCH` is not declared because MOS-TRAIN-234 says a
+  # budget-terminated search that nominated none "MUST NOT be papered over by relaxing the
+  # bound and resuming" and MOS-TRAIN-217 makes a later nomination a NEW row referencing
+  # the original by `parent_search_id`, not an edit. `DELETE` is not declared because
+  # 0013's `forbid_training_mutation` refuses it and MOS-TRAIN-217 requires non-nominated
+  # trials to be retained with their digests so a re-nomination is auditable.
+  # ---------------------------------------------------------------------------------
+  - operation_id: declareConfigurationSearch
+    method: POST
+    path: /configuration-searches
+    summary: Register a search with a digested declarative space and a bounded budget
+    permission: configuration_search.declare
+    idempotency: optional
+    status: served
+    table_row: R13
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-218
+    surface: expert
+    engine: medos.training.search.create
+    note: >-
+      The verb is declare and not create. MOS-SEC-034 pairs a create permission with a
+      removal disposition and names four never-deleted resources; configuration_searches is
+      append-only under 0013 and would owe a fifth entry, which is chapter 8's edit. The
+      domain's own word is registration -- MOS-TRAIN-220 refuses registration of a space
+      that violates its grammar -- so no verb had to be invented to avoid create.
+    request:
+      media_type: application/json
+      schema: ConfigurationSearchDeclareRequest
+    responses:
+      "201":
+        schema: ConfigurationSearch
+        headers: [Location]
+    problems: [schema-violation, configuration-search-refused, cross-tenant-denied]
+
+  - operation_id: getConfigurationSearch
+    method: GET
+    path: /configuration-searches/{configuration_search_id}
+    summary: Read the search, its space, its budget, its cost and its nomination
+    permission: configuration_search.read
+    idempotency: not_applicable
+    status: served
+    table_row: R14
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-218
+    surface: expert
+    engine: medos.training.search.get
+    responses:
+      "200":
+        schema: ConfigurationSearch
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: nominateConfigurationSearchTrial
+    method: POST
+    path: /configuration-searches/{configuration_search_id}/nomination
+    summary: Nominate the one trial MOS-TRAIN-216 admits
+    permission: configuration_search.nominate
+    idempotency: optional
+    status: served
+    table_row: R15
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-216
+    surface: expert
+    engine: medos.training.search.nominate
+    note: >-
+      A separate route and a separate permission from declare, because this act spends the
+      test partition. MOS-TRAIN-217 makes a later nomination an explicit recorded act with
+      its own row and a fresh increment of test_exposure_count, on the grounds that a silent
+      second nomination off the back of a first test run is selection on test performed one
+      candidate at a time. A grant that bundled declare and nominate would let whoever may
+      start a search also spend the consumable, which is the separation MOS-TRAIN-216 is
+      about. The path segment is singular because there is exactly one, and 0013's
+      training_runs_one_nomination unique partial index refuses a second.
+    request:
+      media_type: application/json
+      schema: ConfigurationSearchNominationRequest
+    responses:
+      "200":
+        schema: ConfigurationSearch
+    problems: [schema-violation, configuration-search-refused, not-found, cross-tenant-denied]
+
+  # ---------------------------------------------------------------------------------
+  # ConversionRun. Table 10.2-B rows R16-R17. NOT A CONSOLE SURFACE EITHER -- chapter 19
+  # gives conversion no screen at all, so MOS-UI-101's no-digest rule does not reach it
+  # and `equivalence_cohort_digest` may be a request member.
+  #
+  # Declared because register entry 79 names ConversionRun among the three entities the
+  # API is missing, and because a conversion performed outside the API and recorded
+  # afterwards is a ModelVersion whose equivalence evidence nobody watched being produced.
+  # MOS-TRAIN-164 is the rule the request schema renders structurally: a conversion failing
+  # any tolerance MUST NOT be registered, the remedy is a different conversion and never a
+  # relaxed bound, "a tolerance relaxed to admit one artifact silently relaxes it for every
+  # future artifact of that family" -- so there is no `tolerances` member and no per-case
+  # skip, matching medos/medos/training/conversion.py, which accepts neither.
+  # ---------------------------------------------------------------------------------
+  - operation_id: submitConversionRun
+    method: POST
+    path: /conversion-runs
+    summary: Convert a registered ModelVersion, subject to the E1/E2/E3 equivalence check
+    permission: conversion_run.submit
+    idempotency: optional
+    status: served
+    table_row: R16
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-156
+    surface: expert
+    engine: medos.training.conversion.create
+    request:
+      media_type: application/json
+      schema: ConversionRunSubmitRequest
+    responses:
+      "202":
+        schema: ConversionRun
+        headers: [Location]
+    problems: [schema-violation, conversion-refused, not-found, cross-tenant-denied]
+
+  - operation_id: getConversionRun
+    method: GET
+    path: /conversion-runs/{conversion_run_id}
+    summary: Read the run and its full equivalence result, not only the verdict
+    permission: conversion_run.read
+    idempotency: not_applicable
+    status: served
+    table_row: R17
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-156
+    surface: expert
+    engine: medos.training.conversion.get
+    responses:
+      "200":
+        schema: ConversionRun
+    problems: [not-found, cross-tenant-denied]
+
+  # ---------------------------------------------------------------------------------
+  # The corpus-assembly surface. Table 10.2-B rows R18-R31, plus entries for the two
+  # existing rows 32 and 37 that this surface reads.
+  #
+  # WHY THESE ROWS EXIST. `POST /api/v1/training-runs` (R6) takes a dataset_version_id,
+  # a split_id and an annotation_set_id, and until this change NOT ONE OF THE THREE HAD A
+  # PRODUCER ON /api/v1. `declare_sampling_plan`, the curation queue, `seal_from_batch`,
+  # `freeze_split` and `freeze_annotation_set` appeared in no chapter's route table, so
+  # the served surface began one step after the operator's first step ended. Register
+  # entry 79 named the run side of this and understated it: the missing half was upstream.
+  #
+  # ALL SIXTEEN ARE NOW `status: served`, BY `medos/medos/api/routes_curation.py`. They were
+  # declared `reserved` by the change that wrote this block and served by the next one;
+  # `status:` is checked in both directions against the running ASGI app
+  # (`medos/tools/permcheck.py`), so the flip was not optional bookkeeping -- mounting a handler
+  # without it is a red run, and flipping without a handler is a red run too.
+  #
+  # WHAT IS STILL NOT SERVED, AND IS THE REMAINING GAP: `MOS-API-112`'s R1-R5. A browser
+  # can now declare a plan, read the batch and its queue, preview the split, seal, poll,
+  # read the frozen split and freeze the reference standard -- and it still cannot OPEN a
+  # batch or DECIDE a candidate, because that requirement says those five paths "MUST NOT
+  # be served" and this file does not grant a licence chapter 10 withholds.
+  #
+  # THE ONE DESIGN DECISION, AND IT IS THE SEAL. Rows R26 and R27 are `202` + `Location`
+  # + poll, the general long-running-operation pattern of MOS-API-056, driven through the
+  # `Orchestrator` port of MOS-TRAIN-122. Three shapes were available:
+  #
+  #   SYNCHRONOUS -- REFUSED TWICE OVER. MOS-EVID-018's `series_pixel_digest` is a digest
+  #     over STORED pixel values "computed by the caller that holds the pixels"
+  #     (medos/medos/evidence/manifest.py: this module never opens a DICOM file) and
+  #     MOS-EVID-034 L4's `dhash64` is a hash of the normalised mid-axial slice. Both
+  #     oblige the seal to retrieve every instance of every series through the Gateway as
+  #     `dataset_export` (MOS-TRAIN-068, MOS-TRAIN-199), and MOS-TRAIN-114's floor of 30
+  #     `test` patients puts the smallest sealable cohort near 150. Minutes. The arithmetic
+  #     is not the binding reason: MOS-UI-134 requires L3 and L4 to run "as a named,
+  #     progress-reported step with the cohort size shown, never as a silent wait", and a
+  #     synchronous POST has nowhere to report progress from. A socket that is either open
+  #     or closed also cannot tell the operator whether a DatasetVersion was created --
+  #     the state MOS-UI-132 forbids leaving them in.
+  #   A `Job` -- REFUSED, AND MOS-API-001 IS THE REASON THE ENTITY EXISTS RATHER THAN AN
+  #     OBSTACLE TO IT. "POST /api/v1/jobs is the only endpoint that may create a Job. No
+  #     other path in the system may create a Job." Chapter 17 forbids it independently and
+  #     more strongly: MOS-TRAIN-121 C3 excludes `job.create` from the orchestrator account
+  #     outright, C2 forbids the pipeline appearing between a Job and its Result, C4
+  #     requires a total orchestrator outage to change the outcome of no Job at all. A seal
+  #     that created a Job would need a grant the pipeline identity MUST NOT hold.
+  #   THE ORCHESTRATOR, POLLED -- TAKEN. MOS-API-056 already names a long-running operation
+  #     that is not a Job: `EvaluationRun`, row 42. MOS-API-057 fixes the polling hint at
+  #     `Retry-After: 30`. MOS-TRAIN-122's four methods -- Submit, Poll, Cancel, Logs --
+  #     are the shape R26 and R27 render, and MOS-API-112's sentence that "until then the
+  #     pipeline is driven through its own offline orchestrator, not through /api/v1" is
+  #     the state these two rows are written to end.
+  #
+  # AND THE THIRD OPTION -- DECLARING THE PIXEL-DEPENDENT CHECKS SKIPPED -- IS WHAT THIS
+  # DEPLOYMENT WILL ACTUALLY DO, WHICH IS WHY THE RESPONSE MAKES IT UNHIDEABLE.
+  # `medos/medos/evidence/repo.py::load_records` returns `dhash64` as None for every rehydrated
+  # record and says so in its own docstring; no adapter in this platform computes either
+  # pixel-derived quantity today. MOS-EVID-037 already rules that L4 then reports `skipped`
+  # with an explicit reason rather than `pass`, and that is legitimate. The danger is not
+  # the skip; it is a cohort sealed without near-duplicate detection being presented to a
+  # no-code operator as SEALED and read by them as CHECKED. So `schemas/evidence/
+  # seal-run-1.0.0.json` makes the disclosure structural rather than editorial:
+  #   - `check_battery` carries exactly nine entries, one per row of MOS-UI-133's table,
+  #     and no entry may be omitted -- a missing check is not a pass;
+  #   - `outcome` is closed at pass / fail / warn / skipped;
+  #   - a `skipped` entry MUST carry a `skipped_reason` (>= 20 chars) AND an
+  #     `operator_disclosure` (>= 40 chars) written in MOS-UI-105's register;
+  #   - an entry whose `outcome` is `pass` MUST report `series_without_pixel_evidence: 0`.
+  # A handler that retrieved no pixels therefore CANNOT emit a schema-valid SealRun
+  # claiming L3 or L4 passed. MOS-UI-144's "the console MUST show the skip rather than a
+  # pass" becomes a property of the response instead of an instruction to the browser.
+  # Only the `pass` direction is constrained: a `fail` found among the series that WERE
+  # hashed is a real finding, and forcing it to `skipped` would hide a genuine leak.
+  #
+  # THREE ABSENCES ACROSS THIS BLOCK, EACH A RULE AND NOT A GAP
+  #   NO ROUTE FREEZES A SPLIT. MOS-UI-130 makes the seal one operator action spanning the
+  #     DatasetVersion seal and the DatasetSplit freeze, and MOS-UI-132 makes it atomic from
+  #     the operator's view. Independently: a freeze route would have to accept
+  #     `assignments`, and a caller that names which patients are in `test` is
+  #     MOS-TRAIN-141's "container that can name its own data" with an HTTP client in front
+  #     of it. The server assigns by MOS-TRAIN-112's pure function and no request member
+  #     anywhere in this block carries a partition, a fraction or a seed (MOS-EVID-028).
+  #   NO ROUTE WRITES A WAIVER. MOS-UI-135, and MOS-TRAIN-115's reason that a waiver on L1,
+  #     L2, L3 or L5 cannot permit a training run anyway.
+  #   NO ROUTE CREATES A `Dataset`. Row 33 binds `dataset.write`, which section 8.3.2
+  #     registers as a spelling a build MUST fail on and which MOS-UI-104 forbids this
+  #     surface propagating; register entry 5 owns re-pointing it across twenty-one rows.
+  #     Row 32 IS declared, so the operator selects a Dataset rather than composing its id
+  #     (MOS-UI-101), and MOS-EVID-027's licence stays a legal act by the site -- the same
+  #     posture MOS-UI-110 takes toward the TrainingDataPolicy.
+  #
+  # WHAT IS STILL MISSING AND IS NOT DECLARED HERE, because this file does not declare
+  # routes in anticipation. MOS-UI-114 requires every FACET VALUE to display its patient
+  # count before it is selected, and a value with zero matches to be shown as zero rather
+  # than omitted -- "the difference between *this archive has no 0.6 mm studies* and *your
+  # current filters exclude them* is the difference between two entirely different
+  # remedies". No engine function computes facet-value patient counts over the archive;
+  # row 70's study projection is the nearest existing surface and is not the same object.
+  # A row for it would be a declaration that something exists when it does not.
+  # ---------------------------------------------------------------------------------
+  - operation_id: getTenantTrainingPolicy
+    method: GET
+    path: /tenants/{tenant_id}/training-policy
+    summary: Whether this tenant's policy permits training use, and the instrument recorded
+    permission: training_data_policy.read
+    idempotency: not_applicable
+    status: served
+    table_row: R18
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-073
+    surface: training_console
+    engine: medos.training.policy.live_policy
+    note: >-
+      The read half of R4, and the row R4 could not be. MOS-UI-110 requires the console's
+      FIRST screen to render `training_use_allowed = false` under the refusal contract and
+      forbids it rendering an HTTP status, a problem document or the string `403`; without
+      this row the only way to learn the flag is to be refused by R1, so the console would
+      have to render a refusal it is forbidden to render or infer one it cannot distinguish
+      from a network fault. `surface:` IS set here and is deliberately absent on R4:
+      MOS-UI-110 forbids the console editing the policy, and `training_data_policy.record` is
+      `governance`, which MOS-UI-102 keeps off this surface. Reading is `read`. The two
+      halves of one resource sit on different sides of that line and the registry says which.
+    responses:
+      "200":
+        schema: TrainingDataPolicy
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: declareSamplingPlan
+    method: POST
+    path: /sampling-plans
+    summary: Declare the versioned SamplingPlan MOS-TRAIN-083 requires before any draw
+    permission: sampling_plan.declare
+    idempotency: optional
+    status: served
+    table_row: R19
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-083
+    surface: training_console
+    engine: medos.training.curation.declare_sampling_plan
+    note: >-
+      The cohort builder's only write, and the place MOS-UI-111 is enforced structurally.
+      `strata` is a CLOSED object over MOS-UI-112's facet table, which fixes the facet set at
+      "exactly the fields that the seal-time checks and the split generator read" and nothing
+      else -- and each facet carries one member, `include`, holding the values chosen. There is no `exclude`, no `min`, no `max`, no `pattern` and no operator
+      member anywhere in the body, because MOS-UI-111 names a query language, a free-text
+      search, a regular expression, a boolean expression builder and a saved-query editor and
+      forbids each one. `min_naive_fraction` and `de_novo_control_fraction` are not members:
+      MOS-TRAIN-083 sets the first floor and MOS-TRAIN-101 the second, and a client that may
+      supply either may supply zero. MOS-API-022 does not reach this row, so the idempotency
+      key is optional -- recorded in the amended MOS-API-112, not closed here.
+    request:
+      media_type: application/json
+      schema: SamplingPlanDeclareRequest
+    responses:
+      "201":
+        schema: SamplingPlan
+        headers: [Location]
+    problems: [schema-violation, curation-refused, cross-tenant-denied]
+
+  - operation_id: listSamplingPlans
+    method: GET
+    path: /sampling-plans
+    summary: List the sampling plans declared for this tenant
+    permission: sampling_plan.read
+    idempotency: not_applicable
+    status: served
+    table_row: R20
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-083
+    surface: training_console
+    engine: medos.training.curation.list_sampling_plans
+    responses:
+      "200":
+        schema: Page<SamplingPlan>
+    problems: [cross-tenant-denied, rate-limited]
+
+  - operation_id: getSamplingPlan
+    method: GET
+    path: /sampling-plans/{sampling_plan_id}
+    summary: Read one plan, its strata and the spec_digest it was sealed under
+    permission: sampling_plan.read
+    idempotency: not_applicable
+    status: served
+    table_row: R21
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-083
+    surface: training_console
+    engine: medos.training.curation.get_sampling_plan
+    note: >-
+      No PATCH and no DELETE, and both absences are MOS-STORE-359: sampling_plans is sealed
+      outright by a BEFORE UPDATE trigger, on that requirement's own ground that a plan
+      edited after the draw cannot describe the draw. A changed plan is a new plan_version
+      row.
+    responses:
+      "200":
+        schema: SamplingPlan
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: listHarvestBatches
+    method: GET
+    path: /harvest-batches
+    summary: List harvest batches
+    permission: harvest_batch.read
+    idempotency: not_applicable
+    status: served
+    table_row: R22
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-078
+    surface: training_console
+    engine: medos.training.curation.list_batches
+    note: >-
+      Row R7's argument, one entity earlier. MOS-UI-138 requires the working set to survive a
+      refusal intact, on the ground that a refusal which discards work teaches the operator
+      to avoid the check -- and a surface whose operator closes the tab mid-curation and
+      cannot find the batch again has taught them the same thing by another route.
+    responses:
+      "200":
+        schema: Page<HarvestBatch>
+    problems: [cross-tenant-denied, rate-limited]
+
+  - operation_id: getHarvestBatch
+    method: GET
+    path: /harvest-batches/{harvest_batch_id}
+    summary: Read one batch, its state and its counts
+    permission: harvest_batch.read
+    idempotency: not_applicable
+    status: served
+    table_row: R23
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-078
+    surface: training_console
+    engine: medos.training.curation.get_batch
+    responses:
+      "200":
+        schema: HarvestBatch
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: listHarvestCandidates
+    method: GET
+    path: /harvest-batches/{harvest_batch_id}/candidates
+    summary: The curation queue -- drawn candidates and their settled decisions
+    permission: harvest_candidate.read
+    idempotency: not_applicable
+    status: served
+    table_row: R24
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-079
+    surface: training_console
+    engine: medos.training.curation.candidates
+    note: >-
+      Without this row R2 and R3 have nothing to act on: they address ONE candidate and
+      MOS-UI-119 requires every candidate to receive an explicit decision by the named
+      operator. THIS IS THE ROW CLOSEST TO A PATIENT ON THE WHOLE SURFACE, so the projection
+      is subtractive. No field MOS-TRAIN-079 forbids on a candidate is a member and none may
+      be added (MOS-UI-122); `institution_key` is MOS-TRAIN-089's HMAC and there is no
+      display-name member to tempt a resolver (MOS-UI-113, MOS-EVID-116); `instance_uids` is
+      projected as a COUNT, because a page whose size is the cohort's instance count is not a
+      page; `note` is not projected at all -- MOS-UI-120 admits it as free text on one
+      decision, and free text written by an operator has no business on a list screen. Every
+      query behind it runs under the tenant GUC.
+    responses:
+      "200":
+        schema: Page<HarvestCandidate>
+    problems: [not-found, cross-tenant-denied, rate-limited]
+
+  - operation_id: getHarvestBatchSplitPreview
+    method: GET
+    path: /harvest-batches/{harvest_batch_id}/split-preview
+    summary: The projected split, computed server-side over the current candidate set
+    permission: harvest_batch.read
+    idempotency: not_applicable
+    status: served
+    table_row: R25
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-112
+    surface: training_console
+    engine: medos.training.split.assign
+    note: >-
+      MOS-UI-116 requires this to come from the server and forbids a second implementation in
+      the browser, because a second implementation in JavaScript would disagree with the
+      authoritative one on exactly the cohorts that sit near a bound -- which is every cohort
+      where the preview matters. MOS-UI-117 makes it a preview and the seal-time result
+      authoritative, so the response carries `is_preview: true` and `authoritative: false` as
+      consts rather than leaving the console to add the word. IT CREATES NOTHING: no
+      DatasetSplit row, no persisted assignment, no id.
+    responses:
+      "200":
+        schema: SplitPreview
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: sealHarvestBatch
+    method: POST
+    path: /harvest-batches/{harvest_batch_id}/seal
+    summary: Seal -- one operator action, submitted and polled, never a Job
+    permission: dataset_version.create
+    also_requires: [dataset_split.freeze]
+    idempotency: optional
+    status: served
+    table_row: R26
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-208
+    surface: training_console
+    engine: medos.training.curation.seal_from_batch
+    note: >-
+      MOS-API-005 admits exactly one permission and this row honestly needs two: MOS-UI-130
+      makes it one action spanning `dataset_version.create` and `dataset_split.freeze`, and
+      binding only the first would let a principal who may seal a version freeze a split they
+      may not. `also_requires:` records the second; both are keys of
+      medos/contracts/permissions.yaml, both are named in table 10.2-A, and widening MOS-API-005 to
+      admit a conjunction is chapter 10's edit to its own prose. MOS-UI-104 is why the
+      spelling is `dataset_version.create` and not row 38's `dataset.write`. The body is one
+      member and the ABSENCES are the contract -- see
+      schemas/evidence/seal-run-submit-request-1.0.0.json for each one and the requirement
+      that removes it.
+      THE THREE PIECES THIS ROW OWED, AND WHERE EACH ONE LANDED. `engine_absent:` on this
+      entry named a missing `seal_runs` table, a missing MOS-TRAIN-112 `assign()` and a
+      missing `dataset_export` retrieval adapter. The table is 0015_seal_runs.up.sql,
+      `assign()` is medos/medos/training/split.py and the adapter is
+      medos/medos/training/retrieval.py. THE THIRD ONE RETRIEVES NOTHING ON THIS DEPLOYMENT AND
+      THAT IS NOT A GAP IN IT: medos/medos/gateway/app.py answers every retrieval whose consumer
+      class is not `clinical_viewer` or `platform_writer` with 503 DEID_NOT_IMPLEMENTED,
+      because the de-identification stage is unbuilt and MOS-DATA-037 requires the egress
+      to fail closed rather than emit identified data -- and `dataset_export` is the only
+      class MOS-TRAIN-068 permits the pipeline. So L3 and L4 report `skipped` with
+      MOS-EVID-037's explicit reason and MOS-UI-105's operator disclosure, and the SealRun
+      schema makes a `pass` unreachable while `series_without_pixel_evidence` is non-zero.
+      Retrieving as `platform_writer` instead would succeed and would put IDENTIFIED
+      pixels into a training corpus; the adapter does not hold that principal and MUST NOT
+      acquire one.
+    request:
+      media_type: application/json
+      schema: SealRunSubmitRequest
+    responses:
+      "202":
+        schema: SealRun
+        headers: [Location, Retry-After]
+    problems: [schema-violation, curation-refused, dataset-seal-refused, split-freeze-refused, training-use-not-permitted, deployment-not-declared, not-found, cross-tenant-denied]
+
+  - operation_id: getSealRun
+    method: GET
+    path: /seal-runs/{seal_run_id}
+    summary: Poll the seal -- progress, and the nine-check battery with its skips named
+    permission: dataset_version.read
+    idempotency: not_applicable
+    status: served
+    table_row: R27
+    defined_by: MOS-API-089
+    entity_owner: MOS-EVID-037
+    surface: training_console
+    engine: medos.training.seal.get_seal_run
+    note: >-
+      `engine:` names `medos.training.seal.get_seal_run` and not
+      `medos.training.orchestrator.poll`, which is what this entry said while it was
+      reserved. `Poll` is one of MOS-TRAIN-122's four METHODS on a port whose driver runs
+      a TrainingRun; the seal's state lives in the `seal_runs` row, so polling it is one
+      SELECT under the tenant GUC and survives a restart of whatever ran the work. A
+      driver method here would have been a second place the state could live.
+      MOS-API-057: polled on its own resource, `Retry-After: 30` returned at creation --
+      and on every non-terminal poll, so a client that lost the 202 still learns the hint
+      rather than choosing its own -- and a
+      client MUST NOT poll faster than the returned hint. The load-bearing member is
+      `check_battery`; the reasoning is in the block above and in the schema. Bound to
+      `dataset_version.read` rather than to `harvest_batch.read` because the document names
+      the sealed version, its digest and its per-partition counts -- MOS-API-005 binds a
+      permission to what a route reads, not to what its first path segment is called.
+    responses:
+      "200":
+        schema: SealRun
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: getDatasetSplit
+    method: GET
+    path: /dataset-splits/{dataset_split_id}
+    summary: The frozen split, its partition counts and its full leakage report
+    permission: dataset_split.read
+    idempotency: not_applicable
+    status: served
+    table_row: R28
+    defined_by: MOS-API-089
+    entity_owner: MOS-EVID-028
+    surface: training_console
+    engine: medos.evidence.repo.get_split
+    note: >-
+      The WHOLE leakage_report and not a verdict. MOS-EVID-035 stores it verbatim,
+      MOS-EVID-036 requires every waiver reproduced in full in any ValidationReport citing the
+      split, and MOS-EVID-037 makes a `skipped` L4 a permanent property of the split -- a
+      projection carrying only `frozen: true` would hide, one screen after R27 made it
+      visible, exactly the thing R27 exists to show. There is no POST on this collection: see
+      R26.
+    responses:
+      "200":
+        schema: DatasetSplit
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: freezeAnnotationSet
+    method: POST
+    path: /dataset-versions/{dataset_version_id}/annotation-sets
+    summary: Close the campaign and freeze the reference standard
+    permission: annotation_set.create
+    idempotency: optional
+    status: served
+    table_row: R29
+    defined_by: MOS-API-089
+    entity_owner: MOS-TRAIN-110
+    surface: training_console
+    engine: medos.evidence.repo.freeze_annotation_set
+    note: >-
+      MOS-UI-129 makes closing the campaign an explicit action and requires the console to
+      state BEFORE it that a frozen set cannot be appended to and that adding a reader or a
+      case produces a new set. There is no PATCH and no DELETE here, for the same
+      MOS-TRAIN-110 reason, and `annotation_sets_frozen` refuses the other reading in the
+      database. MOS-UI-124's reader fields are structured members; `tool` is not one of them
+      because that requirement has the platform fill it from the deployed annotation stack.
+      MOS-API-022 does not reach this row, so the idempotency key is optional.
+      THE STORE IS STILL NOT BUILT, AND SERVING THIS ROW DID NOT BUILD IT. `engine_absent:`
+      here named the absent annotation server of MOS-TRAIN-095 (chapter 19 section 19.4.3
+      inventories it: no MONAI Label deployment, no annotation code in the OHIF extension,
+      no writer for the `annotations` table -- whose foreign key points at the set the
+      campaign has not yet produced, so it could not hold a campaign's work in any case).
+      The handler therefore reads the closed campaign's MOS-EVID-040 lines from a
+      DEPLOYMENT declaration, `MEDOS_ANNOTATION_CAMPAIGN_DIR`, on exactly the argument
+      medos/medos/api/routes_training.py makes for `MEDOS_TRAINING_ENVIRONMENT`: the assertion
+      is made once, by the deployment, in a place a reviewer can read, rather than
+      per-request by whichever client happened to POST. With no declaration the route
+      answers 503 and names the gap; what it never does is freeze a set over zero cases,
+      because MOS-EVID-046 makes every EvaluationRun citing such a set fail and minting
+      one because the store is missing is the quiet downgrade this surface exists against.
+    request:
+      media_type: application/json
+      schema: AnnotationSetFreezeRequest
+    responses:
+      "201":
+        schema: AnnotationSet
+        headers: [Location]
+    problems: [schema-violation, split-freeze-refused, deployment-not-declared, not-found, cross-tenant-denied]
+
+  - operation_id: listAnnotationSets
+    method: GET
+    path: /dataset-versions/{dataset_version_id}/annotation-sets
+    summary: The reference standards frozen against one cohort
+    permission: annotation_set.read
+    idempotency: not_applicable
+    status: served
+    table_row: R30
+    defined_by: MOS-API-089
+    entity_owner: MOS-EVID-038
+    surface: training_console
+    engine: medos.evidence.repo.list_annotation_sets
+    note: >-
+      So that R6's `annotation_set_id` is chosen from a list rather than composed
+      (MOS-UI-101) and MOS-UI-147's read-only summary can name the one selected.
+    responses:
+      "200":
+        schema: Page<AnnotationSet>
+    problems: [not-found, cross-tenant-denied, rate-limited]
+
+  - operation_id: getAnnotationSet
+    method: GET
+    path: /annotation-sets/{annotation_set_id}
+    summary: Read one frozen set, its readers and its annotation_digest
+    permission: annotation_set.read
+    idempotency: not_applicable
+    status: served
+    table_row: R31
+    defined_by: MOS-API-089
+    entity_owner: MOS-EVID-038
+    surface: training_console
+    engine: medos.evidence.repo.get_annotation_set
+    note: >-
+      The target of R29's Location. The readers are projected rather than reduced to a count
+      because MOS-EVID-043 puts inter-reader agreement in every report citing a multi-reader
+      set and MOS-UI-125 requires the console to have said so before the campaign started: a
+      Dice of 0.82 against a reference whose own inter-reader Dice is 0.84 is a different
+      claim from the same 0.82 against 0.97.
+    responses:
+      "200":
+        schema: AnnotationSet
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: listDatasets
+    method: GET
+    path: /datasets
+    summary: List datasets, so the seal names one rather than the operator composing an id
+    permission: dataset.read
+    idempotency: not_applicable
+    status: served
+    table_row: "32"
+    entity_owner: MOS-EVID-016
+    surface: training_console
+    engine: medos.evidence.repo.list_datasets
+    note: >-
+      An EXISTING row of table 10.2-B, not a new one, and the first of the 81 unrouted rows
+      this file has ever carried an entry for. Declared because R26 requires a dataset_id and
+      MOS-UI-101 forbids the operator composing one. Its sibling row 33 (POST /datasets) is
+      NOT declared: it binds `dataset.write`, which section 8.3.2 registers as a spelling a
+      build MUST fail on and MOS-UI-104 forbids this surface propagating. So a Dataset -- one
+      source, one licence (MOS-EVID-027) -- is recorded by whoever records the site's legal
+      instruments, on the same footing as the TrainingDataPolicy of MOS-UI-110, and this
+      surface selects among them.
+    responses:
+      "200":
+        schema: Page<Dataset>
+    problems: [cross-tenant-denied, rate-limited]
+
+  - operation_id: getDatasetVersion
+    method: GET
+    path: /dataset-versions/{dataset_version_id}
+    summary: Read the sealed cohort MOS-UI-147 renders as a read-only summary
+    permission: dataset.read
+    idempotency: not_applicable
+    status: served
+    table_row: "37"
+    entity_owner: MOS-EVID-015
+    surface: training_console
+    engine: medos.evidence.repo.get_dataset_version
+    note: >-
+      An EXISTING row of table 10.2-B. Declared because MOS-UI-147 renders the cohort in the
+      Train summary and a console that could see its cohort only through the SealRun that
+      made it would lose the summary the next day. Rows 36, 38 and 40 are NOT declared, and
+      the reason is worth recording: they describe a two-step model -- create an UNSEALED
+      version, then seal it -- that this platform does not implement. `seal_dataset_version`
+      mints the version already sealed from the records it is handed, so there is no unsealed
+      version to create, to seal or to delete. Row R26 is the seal this deployment actually
+      performs; the divergence between it and row 38 is chapter 10's to resolve.
+    responses:
+      "200":
+        schema: DatasetVersion
+    problems: [not-found, cross-tenant-denied]

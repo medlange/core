@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/split-test-exposure/1.0.0.json",
+  "title": "SplitTestExposure",
+  "description": "The wire form of one split_test_exposure row (0013_training.up.sql section 6), for table 10.2-B row R11. THIS IS THE WHOLE OF SECTION 19.3.6 ON THE WIRE, AND THE REASON IT IS A READ AND NOT AN ACTION. MOS-UI-162 makes evaluation automatic on state SUCCEEDED and states it MUST NOT be an action the operator initiates: MOS-TRAIN-138 registers the bundle and MOS-TRAIN-140 creates the candidate EvaluationRun on partition test using the same split_digest and annotation_digest the run was fitted against, both inside the pipeline, both without a client. So chapter 19 section 19.3.6 gets no POST, and the EvaluationRun it produces is read through the rows chapter 10 already carries -- 43 (GET /evaluations/{id}) and 44 (per-case metrics). Row 42 (POST /evaluations) exists and is NOT the path for this run; MOS-UI-162 forbids the console offering it, and a second create path for the candidate run would be two ways to spend the one consumable this row counts. What chapter 10 did NOT carry is the counter itself, which MOS-TRAIN-216 requires the platform to maintain per (capability_id, split_digest), increment on every SUCCEEDED test run, render in the approval dossier and never reset. MOS-UI-163 requires the console to display it, label it as a count that only goes up, and say what it means. A path keyed directly on (capability_id, split_digest) would make the operator compose a digest, which MOS-UI-101 forbids outright, so the counter is read through a TrainingRun the caller can already read and the pair comes off that row.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "capability_id",
+    "split_digest",
+    "exposure_count",
+    "monotonic",
+    "first_exposed_at",
+    "last_exposed_at"
+  ],
+  "properties": {
+    "capability_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "split_digest": {
+      "description": "Read from the TrainingRun named in the path, never supplied by the caller.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "exposure_count": {
+      "description": "MOS-TRAIN-216: the number of distinct SUCCEEDED EvaluationRuns on this split's test partition, for this capability. Zero before the first candidate run, which is the ordinary state of a split that has just been frozen.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "monotonic": {
+      "description": "Always true, and a const rather than a comment. MOS-UI-163 requires the console to label the figure as a count that only goes up; a constant on the wire is a fact the server asserts, whereas the same sentence written into a console template is a claim one client makes and another may not. The database holds the same assertion twice over (split_test_exposure_monotonic refuses a decrement, split_test_exposure_no_delete refuses the row's removal), so this member cannot become a lie without a migration.",
+      "type": "boolean",
+      "const": true
+    },
+    "first_exposed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "last_exposed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}

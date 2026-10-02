@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/harvest-batch-create-request/1.0.0.json",
+  "title": "HarvestBatch create request",
+  "description": "The body of POST /api/v1/harvest-batches, reserved by MOS-API-112 and registered in table 10.2-B row R1 against the permission harvest_batch.open. Chapter 17 owns the entity (MOS-TRAIN-078, MOS-TRAIN-083, MOS-TRAIN-202) and chapter 12 its physical form; this schema is the wire form and redefines neither. Fields are derived from the columns 0011_curation.up.sql leaves writable at insert. tenant_id is NOT a member: it is bound from the credential, and a tenant_id in a request body is the shape MOS-API-041's cross-tenant refusal exists to prevent. opened_by is NOT a member either: it is the authenticated principal, and MOS-TRAIN-080's 'named human' is worth nothing if the caller may name someone else.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "capability_id",
+    "sampling_plan_id",
+    "training_data_policy_id"
+  ],
+  "properties": {
+    "capability_id": {
+      "description": "MOS-REG-041: lower snake_case. The capability the corpus is being harvested for.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "sampling_plan_id": {
+      "description": "MOS-TRAIN-083: a HarvestBatch MUST declare a versioned SamplingPlan BEFORE any candidate is drawn. Required, never nullable: a nullable plan makes the rule a convention. The plan is sealed at insert (MOS-STORE-359), so this names an existing sampling_plans row and never a plan supplied inline.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "training_data_policy_id": {
+      "description": "MOS-TRAIN-073 and MOS-TRAIN-076: the batch names the instrument it was drawn under, so a later revocation can say which candidates predate it without reconstructing the answer from timestamps. MOS-TRAIN-072 is evaluated against the tenant's training_use_allowed before this body is read; a false flag refuses 403 TRAINING_USE_NOT_PERMITTED and no batch is created.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    }
+  }
+}

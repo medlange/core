@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/configuration-search-nomination-request/1.0.0.json",
+  "title": "ConfigurationSearch nomination request",
+  "description": "The body of POST /api/v1/configuration-searches/{configuration_search_id}/nomination, table 10.2-B row R15, bound to configuration_search.nominate. WHY NOMINATION IS ITS OWN ROUTE AND ITS OWN PERMISSION. MOS-TRAIN-216 admits exactly one nominated trial per search, and only the nominated trial may be registered as a ModelVersion or be the subject of a candidate EvaluationRun on test -- evaluating all N trials on test and keeping the best is the same defect with more GPU hours and a cleaner-looking audit trail. MOS-TRAIN-217 makes a later nomination an explicit recorded act with its own row, its own rationale and a fresh increment of test_exposure_count, because a silent second nomination off the back of a first test run is selection on test performed one candidate at a time. An act that consumes the one resource MOS-TRAIN-216 calls a consumable is not a PATCH on a search and is not a boolean on a trial submission: it is a separate call, separately granted, and the singular path segment says there is one of them. The method is POST and not PUT: PUT would read as replaceable, and the unique partial index training_runs_one_nomination refuses a second nomination on the same search outright.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "training_run_id",
+    "runner_up_training_run_id",
+    "selection_margin",
+    "trials_completed",
+    "cost"
+  ],
+  "properties": {
+    "training_run_id": {
+      "description": "The nominated trial. It is an ordinary TrainingRun (MOS-TRAIN-219) already carrying the complete binding of MOS-TRAIN-124, so nominating promotes nothing and creates nothing -- which is the property that requirement exists to buy.",
+      "type": "string",
+      "pattern": "^tr_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "runner_up_training_run_id": {
+      "description": "Required, and 0013 refuses it being the same run as the nomination. selection_margin is a difference and a difference needs two terms; a nomination that names no runner-up is a ranking of one dressed as a comparison.",
+      "type": "string",
+      "pattern": "^tr_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "selection_margin": {
+      "description": "The gap between the two on the selection metric. medos/medos/training/search.py selection_is_noise() compares it against the capability's seed-variance sd (MOS-TRAIN-127), which is how a team finds out the winner beat the runner-up by less than a re-run of the same code would have. Recorded, never gated on here: MOS-EVID-087 keeps the clinical bar on the Capability and nothing in a search may move it.",
+      "type": "number"
+    },
+    "trials_completed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "trials_failed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cost": {
+      "description": "MOS-TRAIN-234: what was spent and which bound stopped it. stop_reason is required at nomination because SUCCEEDED is refused by 0013 without it, and a search that cannot say why it stopped cannot be told apart from one still running.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stop_reason"
+      ],
+      "properties": {
+        "stop_reason": {
+          "type": "string",
+          "enum": [
+            "space_exhausted",
+            "max_trials",
+            "max_gpu_hours",
+            "max_wall_clock_hours",
+            "cancelled",
+            "failed"
+          ],
+          "x-medicalos-enum": "closed"
+        },
+        "gpu_hours": {
+          "type": "number",
+          "minimum": 0
+        },
+        "wall_clock_hours": {
+          "type": "number",
+          "minimum": 0
+        },
+        "footprint_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

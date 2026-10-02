@@ -1,0 +1,70 @@
+{
+  "_comment": [
+    "Stand-in for the platform's single code dictionary table `capability_concepts`",
+    "(MOS-IMG-111, Chapter 12 MOS-STORE-256). MOS-IMG-113 forbids materialising these",
+    "codes as a constant map or enum in code, so the spike loads them from data.",
+    "Structural DCM concepts (report title, tracking identifier, observer context, ...)",
+    "are NOT here: MOS-IMG-113 classes them as structural and supplied as constants by",
+    "highdicom / pydicom.sr.codedict.",
+    "A concept with no row here MUST NOT be written - the writer raises (MOS-IMG-112)."
+  ],
+  "concepts": {
+    "anatomy.lung": {"coding_scheme": "SCT", "code_value": "39607008", "code_meaning": "Lung structure", "code_scheme_version": "2023-09-01"},
+    "anatomy.lung_left": {"coding_scheme": "SCT", "code_value": "44029006", "code_meaning": "Left lung", "code_scheme_version": "2023-09-01"},
+    "anatomy.lung_right": {"coding_scheme": "SCT", "code_value": "3341006", "code_meaning": "Right lung", "code_scheme_version": "2023-09-01"},
+    "anatomy.heart": {"coding_scheme": "SCT", "code_value": "80891009", "code_meaning": "Heart structure", "code_scheme_version": "2023-09-01"},
+    "anatomy.esophagus": {"coding_scheme": "SCT", "code_value": "32849002", "code_meaning": "Esophageal structure", "code_scheme_version": "2023-09-01"},
+    "anatomy.spinal_cord": {"coding_scheme": "SCT", "code_value": "180924008", "code_meaning": "Spinal cord structure", "code_scheme_version": "2023-09-01"},
+    "anatomy.thorax": {"coding_scheme": "SCT", "code_value": "51185008", "code_meaning": "Thoracic structure", "code_scheme_version": "2023-09-01"},
+
+    "category.anatomy": {"coding_scheme": "SCT", "code_value": "123037004", "code_meaning": "Anatomical Structure", "code_scheme_version": "2023-09-01"},
+    "category.abnormal": {"coding_scheme": "SCT", "code_value": "49755003", "code_meaning": "Morphologically Abnormal Structure", "code_scheme_version": "2023-09-01"},
+
+    "procedure.ct_chest": {"coding_scheme": "SCT", "code_value": "169069000", "code_meaning": "CT of chest", "code_scheme_version": "2023-09-01"},
+
+    "quantity.volume": {
+      "coding_scheme": "SCT", "code_value": "118565006", "code_meaning": "Volume",
+      "code_scheme_version": "2023-09-01",
+      "measurement_id": "volume_ml", "ucum_unit": "ml", "ucum_unit_meaning": "mL",
+      "computation_geometry": "source"
+    },
+    "quantity.laa_percent": {
+      "coding_scheme": "99MEDOS", "code_value": "LAA950",
+      "code_meaning": "Percent lung volume below -950 HU",
+      "code_scheme_version": "1.0.0",
+      "measurement_id": "emphysema_laa", "ucum_unit": "%", "ucum_unit_meaning": "%",
+      "computation_geometry": "source",
+      "private_code_rationale": "SNOMED-CT, RadLex, DCM and LOINC searched 2025-01; no term expresses a threshold-parameterised low-attenuation-area percentage. Review for promotion each minor release (MOS-IMG-114)."
+    },
+    "param.operating_threshold": {
+      "coding_scheme": "99MEDOS", "code_value": "OPERATING_THRESHOLD",
+      "code_meaning": "Operating threshold", "code_scheme_version": "1.0.0",
+      "ucum_unit": "1", "ucum_unit_meaning": "(unity)",
+      "private_code_rationale": "No standard code for a model operating point; required by MOS-IMG-118."
+    },
+
+    "finding.lung_structure_normal": {"coding_scheme": "SCT", "code_value": "39607008", "code_meaning": "Lung structure", "code_scheme_version": "2023-09-01"},
+    "finding.heart_structure_normal": {"coding_scheme": "SCT", "code_value": "80891009", "code_meaning": "Heart structure", "code_scheme_version": "2023-09-01"},
+    "finding.esophagus_structure_normal": {"coding_scheme": "SCT", "code_value": "32849002", "code_meaning": "Esophageal structure", "code_scheme_version": "2023-09-01"},
+    "finding.spinal_cord_structure_normal": {"coding_scheme": "SCT", "code_value": "180924008", "code_meaning": "Spinal cord structure", "code_scheme_version": "2023-09-01"},
+    "finding.pleural_effusion": {"coding_scheme": "SCT", "code_value": "60046008", "code_meaning": "Pleural effusion", "code_scheme_version": "2023-09-01"},
+    "finding.emphysema": {"coding_scheme": "SCT", "code_value": "87433001", "code_meaning": "Pulmonary emphysema", "code_scheme_version": "2023-09-01"}
+  },
+  "segment_profiles": {
+    "_comment": "Per-structure write profile: which concept keys a segment resolves to. Keyed by the structure slug the mask builder emits.",
+    "lung": {"label": "Lung (threshold)", "category": "category.anatomy", "type": "anatomy.lung", "anatomic_region": "anatomy.lung", "finding_type": "finding.lung_structure_normal", "finding_sites": ["anatomy.lung"]},
+    "lung_left": {"label": "Left lung", "category": "category.anatomy", "type": "anatomy.lung_left", "anatomic_region": "anatomy.lung_left", "finding_type": "finding.lung_structure_normal", "finding_sites": ["anatomy.lung_left"]},
+    "lung_right": {"label": "Right lung", "category": "category.anatomy", "type": "anatomy.lung_right", "anatomic_region": "anatomy.lung_right", "finding_type": "finding.lung_structure_normal", "finding_sites": ["anatomy.lung_right"]},
+    "heart": {"label": "Heart", "category": "category.anatomy", "type": "anatomy.heart", "anatomic_region": "anatomy.heart", "finding_type": "finding.heart_structure_normal", "finding_sites": ["anatomy.heart"]},
+    "esophagus": {"label": "Esophagus", "category": "category.anatomy", "type": "anatomy.esophagus", "anatomic_region": "anatomy.esophagus", "finding_type": "finding.esophagus_structure_normal", "finding_sites": ["anatomy.esophagus"]},
+    "spinal_cord": {"label": "Spinal cord", "category": "category.anatomy", "type": "anatomy.spinal_cord", "anatomic_region": "anatomy.spinal_cord", "finding_type": "finding.spinal_cord_structure_normal", "finding_sites": ["anatomy.spinal_cord"]}
+  },
+  "rtstruct_roi_map": {
+    "_comment": "LCTSC ROIName -> structure slug. Lives in data because ROI naming is a site convention, not a platform constant.",
+    "Lung_L": "lung_left",
+    "Lung_R": "lung_right",
+    "Heart": "heart",
+    "Esophagus": "esophagus",
+    "SpinalCord": "spinal_cord"
+  }
+}

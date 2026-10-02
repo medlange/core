@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MedicalOS — Analyze &amp; Provenance</title>
+<!--
+  =====================================================================================
+  The MedicalOS button and provenance panel, running against the PRE-BUILT OHIF image.
+
+  WHY THIS PAGE EXISTS, PLAINLY
+  -----------------------------
+  `ohif/app:v3.9.2` (medos/deploy/compose/docker-compose.yml) is a pre-built single-page app.
+  OHIF v3 resolves `extensions` and `modes` from its own webpack bundle at BUILD time,
+  so `../src/index.js` -- a real OHIF extension, and the thing MOS-REL-027 requires --
+  cannot be loaded into that image at runtime. Getting the React panel into the viewer
+  means checking out the OHIF monorepo, adding this package to its workspace and
+  rebuilding the SPA. See ../README.md for that procedure.
+
+  This page is what runs WITHOUT that rebuild. It is served by the same nginx that serves
+  OHIF, at http://127.0.0.1:3000/medicalos/standalone/, and it imports the SAME
+  ../src/core/*.js modules the React extension does. So the behaviour under test --
+  exactly one POST, the SSE follow, REJECTED rendered distinctly from FAILED, the
+  CONTRACT.md section 10 field set -- is the same code in both, and only the host differs.
+
+  It is NOT a mock and NOT a second job-creation path: it constructs the same
+  `MedicalOSClient` and posts to the same `/api/v1/jobs`.
+  =====================================================================================
+-->
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<header class="medos-app-head">
+  <div class="medos-brand">
+    <span class="medos-logo">◈</span>
+    <div>
+      <h1>MedicalOS</h1>
+      <p class="medos-tag">weeks 1–2 vertical slice · research use only</p>
+    </div>
+  </div>
+  <!-- NOT "Open in OHIF". OHIF is withdrawn (register entry 106) and `location /` answers
+       404, so this link was dead in both its label and its target. It goes to the
+       first-party viewer, which is served under /mos-viewer/ and has no deep link to a
+       single study -- `openStudy` is reached by clicking a worklist row, not by a query
+       parameter -- so this opens the worklist and says so rather than promising a study. -->
+  <a class="medos-viewer-link" id="viewer-link" href="/mos-viewer/" target="_blank" rel="noopener">
+    Open the viewer ↗
+  </a>
+</header>
+
+<main class="medos-app">
+
+  <!-- ---------------------------------------------------------------------------
+       The button. MOS-SAFE-089a: one activation, one POST /api/v1/jobs, carrying the
+       study's study_instance_uid and the selected target.
+       --------------------------------------------------------------------------- -->
+  <section class="medos-card">
+    <h2 class="medos-h2">Analyze a study</h2>
+
+    <label class="medos-field">
+      <span class="medos-field-label">StudyInstanceUID</span>
+      <!--
+        In the real extension this is read from OHIF's DisplaySetService (see
+        src/getCommandsModule.js -> activeStudyInstanceUID). Here it is an input, because
+        this page is not inside the viewer and has no display sets. `?study=<uid>` fills
+        it, which is what a link from the viewer would carry.
+      -->
+      <input id="study-uid" type="text" spellcheck="false" autocomplete="off"
+             placeholder="1.2.840.113745.…">
+    </label>
+
+    <!--
+      MOS-API-043's `target`, as a SINGLE choice, because that is what the member is:
+      `target: {kind, id, version_range?}` names one capability or one service version.
+      This used to be a set of checkboxes sending CONTRACT.md section 9's `capabilities`
+      array; MOS-UI-021a closed that divergence in the surface.
+
+      MOS-UI-017: before 0.3.0 the picker "MUST render a fixed list, configured per
+      deployment, of the single ServiceVersion pinned for each capability ... and MUST NOT
+      present a version selector, a range box or a 'latest' affordance". The list below is
+      built from `window.MEDICALOS` and there is no version control on this page.
+    -->
+    <fieldset class="medos-field">
+      <legend class="medos-field-label">Target (MOS-API-043)</legend>
+      <div id="capabilities" class="medos-caps"></div>
+    </fieldset>
+
+    <div class="medos-actions">
+      <button id="analyze" type="button" class="medos-btn medos-btn-primary" disabled>
+        Analyze with MedicalOS
+      </button>
+      <button id="refresh" type="button" class="medos-btn" hidden>Refresh</button>
+      <span id="submit-note" class="medos-note"></span>
+    </div>
+
+    <p class="medos-fineprint">
+      This page holds no PACS credential. Every request it issues goes to
+      <code class="medos-mono" id="api-root">/api/v1</code>; the viewer's route to the
+      archive is the nginx <code class="medos-mono">/dicomweb/{tenant}/</code> proxy,
+      which this page never touches (MOS-OPS-005, MOS-SAFE-089a). The tenant is IN the
+      path: the Gateway exposes exactly the DICOMweb surface of MOS-DATA-007 and answers
+      404 ROUTE_NOT_EXPOSED to anything else, including the tenant-less
+      <code class="medos-mono">/dicom-web/</code> this sentence used to name.
+    </p>
+  </section>
+
+  <!-- ---------------------------------------------------------------------------
+       The panel. Painted by ../src/core/render.js from ../src/core/provenance.js.
+       --------------------------------------------------------------------------- -->
+  <section class="medos-card medos-panel" data-medos-panel="provenance">
+    <h2 class="medos-h2">Provenance</h2>
+    <div id="panel" class="medos-panel-body">
+      <p class="medos-empty">No analysis yet. Press “Analyze with MedicalOS”.</p>
+    </div>
+  </section>
+
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

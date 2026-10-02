@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/dataset-version/1.0.0.json",
+  "title": "DatasetVersion",
+  "description": "The wire form of one dataset_versions row (0006_evidence.up.sql section 3): chapter 7's sealed, immutable cohort. Response body of table 10.2-B row 37, and the first of the three ids POST /api/v1/training-runs binds (MOS-TRAIN-124). It exists on this surface because MOS-UI-147 renders the cohort as a read-only summary and a console that could see its cohort only through the SealRun that made it would lose the summary the next day. THE ROW IS IMMUTABLE AND THE WIRE FORM SAYS SO: MOS-EVID-013 forbids editing it, MOS-EVID-023 makes a change a new version, MOS-API-011 answers a delete on a sealed one with 409 DATASET_VERSION_SEALED, and MOS-UI-139 requires the console to have stated all of that in plain language BEFORE the seal and without using the word `immutable` unglossed. `status` and `erasure_state` are the only mutable evidence state on the row and neither is reachable from this surface.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dataset_version_id",
+    "public_id",
+    "dataset_id",
+    "version",
+    "parent_version_id",
+    "manifest_digest",
+    "manifest_line_count",
+    "case_count",
+    "patient_count",
+    "study_count",
+    "series_count",
+    "instance_count",
+    "deidentification_status",
+    "status",
+    "erasure_state",
+    "usable_for_new_runs",
+    "sealed_at",
+    "sealed_by"
+  ],
+  "properties": {
+    "dataset_version_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "public_id": {
+      "type": "string",
+      "pattern": "^dsv_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "dataset_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "version": {"type": "integer", "minimum": 1},
+    "parent_version_id": {
+      "description": "MOS-EVID-022: set whenever a version is derived from another by inclusion, exclusion or re-de-identification. MOS-TRAIN-118 and MOS-TRAIN-119 make it the only accepted remedy for an L2 or L5 hit -- write a patient_key_aliases row, re-seal with this set and a merge derivation, re-freeze the split -- and moving a study across partitions is refused as a remedy precisely because it would leave this null.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "manifest_digest": {
+      "description": "Chapter 7's dataset_version_digest, UNIQUE per tenant: MOS-TRAIN-209 makes sealing idempotent on content, and this column is why a re-seal after a fix reuses the identity rather than minting a second one for the same bytes.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "manifest_line_count": {"type": "integer", "minimum": 0},
+    "case_count": {"type": "integer", "minimum": 0},
+    "patient_count": {
+      "description": "The denominator every bound in MOS-UI-115's composition panel is taken against, and the one MOS-TRAIN-114's floor of thirty test patients is computed from. dataset_versions_counts CHECKs patient_count <= case_count: a case is one study of one patient, so a patient with two studies is two cases.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "study_count": {"type": "integer", "minimum": 0},
+    "series_count": {"type": "integer", "minimum": 0},
+    "instance_count": {"type": "integer", "minimum": 0},
+    "deidentification_status": {
+      "description": "MOS-EVID-012 and MOS-EVID-021. MOS-STORE-292a: this is NOT patients.phi_state, the two MUST NOT be conflated and a query MUST NOT join on them notwithstanding the two shared tokens.",
+      "type": "string",
+      "enum": ["identified", "pseudonymised", "public_deidentified"],
+      "x-medicalos-enum": "closed"
+    },
+    "status": {
+      "description": "MOS-EVID-014. The only evidence state on the row that moves, and it moves one way: a version found defective is marked, never edited and never deleted. No route on this surface sets it.",
+      "type": "string",
+      "enum": ["SEALED", "DEFECTIVE"],
+      "x-medicalos-enum": "closed"
+    },
+    "erasure_state": {
+      "description": "MOS-STORE-292: mutable for erasure, never for content. A cohort containing an erased subject is still the cohort a past report cited, which is why the flag exists instead of a deletion.",
+      "type": "string",
+      "enum": ["clean", "contains_erased_subject"],
+      "x-medicalos-enum": "closed"
+    },
+    "usable_for_new_runs": {
+      "description": "False once the version may no longer found a new run. MOS-UI-151 requires the console to re-verify the preconditions a submitted run would itself enforce, and this is the cheapest of them to read.",
+      "type": "boolean"
+    },
+    "sealed_at": {"type": "string", "format": "date-time"},
+    "sealed_by": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    }
+  }
+}

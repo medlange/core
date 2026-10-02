@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "MedicalService",
+  "metadata": {
+    "id": "com.example.sealed-reference",
+    "version": "0.3.0",
+    "display_name": "Example Sealed Reference Service",
+    "summary": "A deterministic reference sealed-mode service used to exercise medicalos-service-abi/1.0 and the Z-SERVICE isolation boundary. It makes no clinical claim.",
+    "homepage": "https://example.invalid/medicalos/sealed-reference",
+    "support_email": "support@example.invalid",
+    "licence": "LicenseRef-Example-Reference-1.0",
+    "built_at": "2026-09-16T00:00:00Z",
+    "source_revision": "git+https://example.invalid/sealed-reference@0000000000000000000000000000000000000000"
+  },
+  "legal_manufacturer": {
+    "name": "Example Sealed Vendor GmbH",
+    "address": {
+      "street": "Beispielstrasse 1",
+      "postal_code": "00000",
+      "city": "Beispielstadt",
+      "country": "DE"
+    },
+    "contact_email": "regulatory@example.invalid",
+    "identifiers": [
+      {"scheme": "EUDAMED-SRN", "value": "DE-MF-000000000"}
+    ],
+    "dicom_equipment": {
+      "manufacturer": "Example Sealed Vendor GmbH",
+      "manufacturer_model_name": "Example Sealed Reference Service",
+      "device_serial_number": "com.example.sealed-reference",
+      "software_versions": "0.3.0"
+    }
+  },
+  "execution": {
+    "mode": "sealed",
+    "abi": "medicalos-service-abi/1.0",
+    "sealed": {
+      "image": "ghcr.io/example/sealed-reference@sha256:4f8b2e05d7a9c361483f9a1c07b2e4d8a95c1f7b60e3d2a4185f9c0b7e6d3a1c",
+      "port": 8080,
+      "scheme": "http",
+      "user": 65534,
+      "read_only_root_filesystem": true,
+      "scratch_mount": "/var/tmp/medicalos"
+    }
+  },
+  "capabilities": [
+    {
+      "capability": "pleural_effusion",
+      "output_kinds": ["finding", "label_map"],
+      "deterministic": true,
+      "operating_points": [
+        {
+          "id": "balanced",
+          "default": true,
+          "score_threshold": 0.42,
+          "evidence": {"validation_report_id": "vr_00000000000000000000000000"}
+        }
+      ]
+    }
+  ],
+  "inputs": {
+    "roles": [
+      {
+        "name": "primary_axial",
+        "required": true,
+        "cardinality": "exactly_one",
+        "series_selector_ref": {
+          "id": "chest-ct-thin-axial-soft-kernel",
+          "version": "1.3.0",
+          "digest": "sha256:2b9d0c1e4f7a6835b2c1d0e9f8a7b6c5d4e3f201a9b8c7d6e5f4a3b2c1d0e9f8"
+        }
+      }
+    ],
+    "applicability": {
+      "slice_thickness_mm": {"min": 0.5, "max": 5.0},
+      "pixel_spacing_mm": {"min": 0.4, "max": 1.0},
+      "min_instances": 1,
+      "contrast_phase": ["none"],
+      "rescale_type": ["HU"]
+    }
+  },
+  "outputs": {
+    "result_bundle_schema": "https://spec.medicalos.org/schemas/v1/result-bundle/1.0.0.json",
+    "label_map_format": "nifti-gzip",
+    "max_result_bundle_bytes": 4194304,
+    "max_artifact_bytes": 268435456,
+    "requested_dicom_kinds": ["SEG"]
+  },
+  "resources": {
+    "cpu": {"request": "1", "limit": "2"},
+    "memory": {"request": "256Mi", "limit": "512Mi"},
+    "gpu": {"required": false, "count": 0},
+    "scratch_disk_gb": 1
+  },
+  "timeouts": {
+    "accept_ms": 5000,
+    "analyze_ms": 60000,
+    "artifact_fetch_ms": 30000,
+    "heartbeat_interval_ms": 1000,
+    "shutdown_grace_ms": 5000
+  },
+  "concurrency": {
+    "max_parallel_executions": 1,
+    "max_queue_depth": 0
+  },
+  "network": {
+    "egress": ["dicom-gateway"],
+    "ingress": ["service-invoker"]
+  },
+  "intended_use_ref": {
+    "path": "intended-use.yaml",
+    "digest": "sha256:7c3e9a1b5d8f0246a8c0e2f4b6d8a0c2e4f6081a3c5e7b9d1f3a5c7e9b1d3f50"
+  },
+  "evidence": {
+    "validation_report_ids": ["vr_00000000000000000000000000"]
+  },
+  "selftest": {
+    "fixture": {
+      "path": "fixtures/golden-sealed-reference.tar.zst",
+      "digest": "sha256:5a1c7e3f9b0d2468ac0e2f4a6c8e0b2d4f6a8c0e2f4b6d8a0c2e4f6a8c0e2f4b"
+    },
+    "expected_result_bundle_digest": "sha256:97ec27db4903cd328d1a271c61c9a569cb3f3991ee4fbcb976e8bebe32472b46",
+    "max_runtime_ms": 10000
+  }
+}

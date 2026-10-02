@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/sampling-plan-declare-request/1.0.0.json",
+  "title": "SamplingPlan declare request",
+  "description": "The body of POST /api/v1/sampling-plans, table 10.2-B row R19, against the permission sampling_plan.declare. MOS-TRAIN-083 requires a versioned SamplingPlan to be declared BEFORE any candidate is drawn, and row R1 names an existing plan rather than accepting one inline, so this is the first act of the cohort builder. THIS BODY IS MOS-UI-111 RENDERED STRUCTURALLY. That requirement forbids the console offering a query language, a free-text search box over metadata, a regular-expression field, a boolean expression builder or a saved-query editor, and requires every constraint to be expressed by choosing among values the archive actually contains. A wire form that accepted an operator, a range or a pattern would leave that rule to the browser; this one has no member in which any of them could be written. tenant_id is not a member (bound from the credential, MOS-API-041); min_naive_fraction and de_novo_control_fraction are not members either, because MOS-TRAIN-083 sets the naive floor and MOS-TRAIN-101 the de-novo control floor at 0.100, and a client that may supply either may supply zero -- the columns carry those two defaults and 0011_curation.up.sql CHECKs the second of them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "capability_id",
+    "plan_version",
+    "strata"
+  ],
+  "properties": {
+    "capability_id": {
+      "description": "MOS-REG-041: lower snake_case. The capability the corpus is being harvested for. MOS-UI-171 restricts the chooser to Capability rows whose status is `supported`; that is a property of the chooser and not of this body, because a capability that was supported at declare time and reserved at draw time is a refusal the platform owes at the draw.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "plan_version": {
+      "description": "MOS-TRAIN-083 and MOS-STORE-359: sampling_plans is sealed outright, so a changed plan is a new plan_version row and never an edit. UNIQUE (tenant_id, capability_id, plan_version) refuses a second declaration at the same version. The server computes spec_digest over the canonical plan body, so a plan claiming to be version 2 of something and byte-identical to version 1 is visible as such rather than being silently accepted as new.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "strata": {
+      "description": "One member per stratification dimension. CLOSED, and MOS-UI-112 is why: 'The facet set MUST be exactly the fields that the seal-time checks and the split generator read, and nothing else' -- a facet the checks do not read lets the operator build a cohort that fails for a reason they never saw. The eighteen members below are MOS-UI-112's own table plus MOS-TRAIN-083's fourth mandatory dimension, acquisition_bucket. The four required ones are MOS-TRAIN-083's minimum, and the same four 0011_curation.up.sql asserts with `strata ?& array[...]`; that CHECK admits any further key and this schema does not, because the database is guarding the floor and MOS-UI-112 is fixing the ceiling.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "score_band",
+        "review_outcome",
+        "ran_on_platform",
+        "acquisition_bucket"
+      ],
+      "properties": {
+        "modality": {"$ref": "#/$defs/facet_selection"},
+        "body_part_examined": {"$ref": "#/$defs/facet_selection"},
+        "institution_key": {"$ref": "#/$defs/facet_selection"},
+        "manufacturer": {"$ref": "#/$defs/facet_selection"},
+        "manufacturer_model_name": {"$ref": "#/$defs/facet_selection"},
+        "convolution_kernel_class": {"$ref": "#/$defs/facet_selection"},
+        "slice_thickness_mm": {"$ref": "#/$defs/facet_selection"},
+        "pixel_spacing_mm": {"$ref": "#/$defs/facet_selection"},
+        "contrast_phase": {"$ref": "#/$defs/facet_selection"},
+        "study_year": {"$ref": "#/$defs/facet_selection"},
+        "patient_age_years": {"$ref": "#/$defs/facet_selection"},
+        "patient_sex": {"$ref": "#/$defs/facet_selection"},
+        "z_coverage_mm": {"$ref": "#/$defs/facet_selection"},
+        "instance_count": {"$ref": "#/$defs/facet_selection"},
+        "review_outcome": {"$ref": "#/$defs/facet_selection"},
+        "score_band": {"$ref": "#/$defs/facet_selection"},
+        "ran_on_platform": {"$ref": "#/$defs/facet_selection"},
+        "acquisition_bucket": {"$ref": "#/$defs/facet_selection"}
+      }
+    }
+  },
+  "$defs": {
+    "facet_selection": {
+      "title": "Facet selection",
+      "description": "The values chosen for one facet, and nothing else. There is deliberately no `exclude`, no `min`, no `max`, no `pattern`, no `op` and no nesting: MOS-UI-111 names each of those shapes and forbids it, and a member that could hold one would make the prohibition a convention the client is trusted to keep. `institution_key` selections carry MOS-TRAIN-089's HMAC and never a site name (MOS-UI-113, MOS-EVID-116); the console resolves its own `Site A` labels for display and MUST NOT offer a control that resolves a label back to a name.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["include"],
+      "properties": {
+        "include": {
+          "description": "The facet values the operator chose. `null` is a permitted element and means MOS-TRAIN-084's `not recorded`: the header did not carry the value and MOS-EVID-020 forbids serialising it as a default. MOS-UI-112 requires the console to render it as a distinct facet value rather than merging it into one, so it has to be expressible here. An empty array is refused: a facet selecting nothing is a cohort of nothing, and MOS-UI-114 requires a zero-match value to be SHOWN as zero rather than chosen.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": ["string", "number", "boolean", "null"]
+          }
+        }
+      }
+    }
+  }
+}

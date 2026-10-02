@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/conversion-run-submit-request/1.0.0.json",
+  "title": "ConversionRun submit request",
+  "description": "The body of POST /api/v1/conversion-runs, table 10.2-B row R16, bound to conversion_run.submit. Chapter 19 gives conversion no screen, so this is not a console route and MOS-UI-101's no-digest rule does not reach it; it is declared because register entry 79 names ConversionRun among the three entities the API surface is missing and because a conversion that is performed outside the API and recorded afterwards is a ModelVersion whose equivalence evidence nobody watched being produced. THE ONE MEMBER THAT IS NOT HERE IS THE POINT: there is no tolerances member, and there is no per-case skip. MOS-TRAIN-164 states it exactly -- a conversion failing any tolerance MUST NOT be registered, the remedy is a different conversion (another precision class, another opset, a different plugin or layer-fusion configuration) and never a relaxed tolerance on that version, because a tolerance relaxed to admit one artifact silently relaxes it for every future artifact of that family. medos/medos/training/conversion.py already refuses to take such an argument; a request schema that accepted one would reintroduce at the edge what the engine refuses in the middle. MOS-TRAIN-162 lets a ModelVersion declare TIGHTER values, which is a comparison the platform performs against the registered version and never a value this body supplies.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_model_version_id",
+    "target_format",
+    "precision",
+    "toolchain",
+    "equivalence_cohort_digest"
+  ],
+  "properties": {
+    "source_model_version_id": {
+      "description": "MOS-TRAIN-169: a SUSPENDED or RECALLED source is refused before the row exists. MOS-TRAIN-166 makes the converted version reference the SAME PreprocessingSpec version as its derived_from source with a byte-identical golden-fixture output tensor -- preprocessing is not what changed -- so no preprocessing member appears in this body; a conversion that needed one is a new lineage under MOS-IMG-046 and not a conversion at all.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "target_format": {
+      "description": "0013's CHECK, verbatim.",
+      "type": "string",
+      "enum": [
+        "torchscript",
+        "onnx",
+        "tensorrt_plan"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "precision": {
+      "type": "string",
+      "enum": [
+        "fp32",
+        "tf32",
+        "fp16",
+        "int8"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "toolchain": {
+      "description": "The exporter and its versions, as recorded. A tensorrt_plan additionally records built_for -- cuda_compute_capability, tensorrt_version, cuda_version -- which the platform reads from the building host rather than from this body, because a plan is only loadable on the hardware it was built for and a client's claim about that hardware is the one fact a later loader cannot check.",
+      "type": "object"
+    },
+    "equivalence_cohort_digest": {
+      "description": "The JCS digest of the ordered patient_key list the E1/E2/E3 check will run over, as medos/medos/training/conversion.py equivalence_cohort_digest() computes it. Named rather than derived because the cohort is a choice the caller makes and MOS-TRAIN-161 requires all three quantities to be computed per case on a stated cohort; a server-chosen cohort would make the equivalence result depend on a selection nobody recorded.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "calibration_dataset_version_id": {
+      "description": "Required exactly when precision is int8 and forbidden otherwise; 0013 carries the same biconditional as a CHECK and the allOf below carries it on the wire.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "calibration_partition": {
+      "description": "MOS-TRAIN-157: calibrating on test is operating-point selection on the test set under another name. The value is a const rather than an enum of one, so the schema states a rule instead of offering a choice with one option.",
+      "type": "string",
+      "const": "tune"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "required": [
+          "precision"
+        ],
+        "properties": {
+          "precision": {
+            "const": "int8"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "calibration_dataset_version_id",
+          "calibration_partition"
+        ]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "calibration_dataset_version_id"
+              ]
+            },
+            {
+              "required": [
+                "calibration_partition"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

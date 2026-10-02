@@ -1,0 +1,65 @@
+{
+  "_comment_00": "MedicalOS weeks 1-2 vertical slice -- Orthanc configuration.",
+  "_comment_01": "Lifted verbatim from spikes/week0/orthanc.json, which is FROZEN and was verified working (spikes/week0/verify-report.json). Every setting below was chosen because its absence produced a specific measured failure; the comments record which.",
+  "_comment_02": "Chapter 13 MOS-OPS-005 requires the PACS to sit on an `internal: true` network reachable only from medicalos-gateway, and requires the viewer to have no route to it. This slice has no gateway (CONTRACT.md section 0), so it publishes Orthanc on 127.0.0.1:8042 and lets the OHIF nginx proxy reach it. That is a deliberate, documented violation closed at weeks 3-5, not an oversight. See README.md, 'What is deliberately missing'.",
+
+  "Name": "medicalos-slice",
+  "StorageDirectory": "/var/lib/orthanc/db",
+  "IndexDirectory": "/var/lib/orthanc/db",
+
+  "_comment_10": "---------------- HTTP ----------------",
+  "HttpServerEnabled": true,
+  "HttpPort": 8042,
+  "HttpDescribeErrors": true,
+
+  "_comment_11": "AuthenticationEnabled is overridden by ORTHANC__AUTHENTICATION_ENABLED in docker-compose.yml. It defaults to false because the browser-side OHIF in this slice has no way to present a credential, and because CONTRACT.md section 0 removes auth from the slice entirely. Production MUST enable it (chapter 8). medos.dicomweb.DicomWebGateway already carries the credential path (MEDOS_DICOMWEB_USER / _PASSWORD), so turning it on is configuration, not code.",
+  "AuthenticationEnabled": false,
+  "RegisteredUsers": {
+    "medicalos": "change-me-in-dot-env"
+  },
+
+  "_comment_12": "Orthanc answers CORS preflight itself once these headers are declared. Allow-Origin is '*' because the stack runs entirely on 127.0.0.1 against public LCTSC data. Production pins this to the gateway origin. Measured caveat from week 0: Orthanc 1.12.x does NOT reliably emit these for every route, which is why the viewer talks to a same-origin nginx proxy instead of to this port directly.",
+  "HttpHeaders": {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "origin, x-requested-with, content-type, accept, authorization, cache-control",
+    "Access-Control-Expose-Headers": "Content-Type, Content-Length, Location, Warning",
+    "Access-Control-Max-Age": "600"
+  },
+
+  "_comment_20": "---------------- DICOM (DIMSE) ----------------",
+  "_comment_21": "The DIMSE listener is off on purpose: this slice transports over DICOMweb only (QIDO/WADO/STOW, medos/medos/dicomweb/client.py), so port 4242 would be untested surface area. Unattended study arrival over DIMSE is a 0.4.0 gate item (MOS-REL-021), not a weeks 1-2 one.",
+  "DicomServerEnabled": false,
+  "DicomAet": "MEDICALOS0",
+
+  "_comment_30": "---------------- Plugins ----------------",
+  "Plugins": [
+    "/usr/share/orthanc/plugins"
+  ],
+
+  "_comment_31": "DICOMweb is the whole transport. `Root` must match MEDOS_DICOMWEB_URL in docker-compose.yml and the DICOMweb roots the browser surfaces use.",
+  "_comment_32": "StudiesMetadata/SeriesMetadata = Full: OHIF asks for series metadata up front. 'MainDicomTags' makes it re-fetch per instance and a 237-slice series appears to hang.",
+  "DicomWeb": {
+    "Enable": true,
+    "Root": "/dicom-web/",
+    "EnableWado": true,
+    "WadoRoot": "/wado",
+    "Ssl": false,
+    "StudiesMetadata": "Full",
+    "SeriesMetadata": "Full"
+  },
+
+  "_comment_40": "---------------- Behaviour ----------------",
+  "_comment_41": "A freshly STOWed series must be QIDO-visible immediately, or MOS-IMG-152's 'QIDO-RS instance count exact' assertion in tests/e2e/test_demo.py races the indexer. Orthanc indexes synchronously; StableAge just keeps the /stable transition short for anything that polls it.",
+  "StableAge": 1,
+
+  "_comment_42": "Rejecting duplicate SOPInstanceUIDs would make the idempotent re-STOW behaviour of MOS-IMG-085/086 untestable, and the idempotency-three-surface gate check (docs/spec/15-delivery.md 15.1.2, release 0.1.0) re-runs the SAME job and asserts no duplicate object appears. Overwrite is enabled deliberately so that the assertion measures the platform's derived UIDs rather than the archive's duplicate policy.",
+  "OverwriteInstances": true,
+
+  "_comment_43": "Keep stored pixel data byte-identical. StorageCompression stays off and IngestTranscoding is deliberately ABSENT (an empty string is not a valid transfer syntax and makes Orthanc refuse to start). Any transcoding here would break the SEG read-back Dice == 1.0 assertion for reasons that have nothing to do with the DICOM writer under test.",
+  "StorageCompression": false,
+
+  "_comment_44": "0 = unlimited. Stated explicitly to document that large-result paging is NOT what this slice tests.",
+  "LimitFindResults": 0,
+  "LimitFindInstances": 0
+}

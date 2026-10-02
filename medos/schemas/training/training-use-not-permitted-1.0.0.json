@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/training-use-not-permitted/1.0.0.json",
+  "title": "Problem: training use not permitted",
+  "description": "The one binding MOS-API-112 fixed before the rest of this surface existed, because it is an error classification and chapter 10 owns those: the refusal of MOS-TRAIN-072, when a tenant's training_use_allowed is false, MUST be 403 with type https://spec.medicalos.org/problems/training-use-not-permitted, class authz_error, code TRAINING_USE_NOT_PERMITTED and retryable false. All four values are const here, so the schema cannot drift from the requirement without failing tests/unit/test_permission_contract.py, which reads both. The members are RFC 9457's (MOS-API-035) plus the five extensions MOS-API-037 requires on EVERY problem document. This problem type carries no extension members of its own and the object is closed: MOS-TRAIN-072 states there is no per-study, per-user or per-environment override and no platform-administrator bypass, so there is nothing per-request to report beyond the refusal itself, and a field naming the study would be the per-study dimension the requirement denies.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "title",
+    "status",
+    "detail",
+    "instance",
+    "class",
+    "code",
+    "retryable",
+    "trace_id",
+    "occurred_at"
+  ],
+  "properties": {
+    "type": {
+      "description": "MOS-API-036: absolute, under https://spec.medicalos.org/problems/, stable for the life of the major version, never dereferenced at runtime.",
+      "type": "string",
+      "const": "https://spec.medicalos.org/problems/training-use-not-permitted"
+    },
+    "title": {
+      "description": "MOS-API-036: short, human-readable, stable per type.",
+      "type": "string",
+      "const": "Training use not permitted"
+    },
+    "status": {
+      "description": "MOS-TRAIN-072 and MOS-API-112: 403. MOS-API-041 makes authorisation failure a 403 and this is one -- the tenant has not licensed the use, which is not a malformed request and not a clinical answer.",
+      "type": "integer",
+      "const": 403
+    },
+    "detail": {
+      "description": "MOS-API-036: instance-specific and PHI-free. MOS-TRAIN-074 lets the platform display what the tenant asserted; it does not let it assess it, so a detail explaining WHY a basis is insufficient would be the platform assuming the assertion.",
+      "type": "string",
+      "minLength": 1
+    },
+    "instance": {
+      "description": "The request path. MOS-API-006: no direct identifier in it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "class": {
+      "description": "MOS-API-112, fixed: authz_error. Closed enum under MOS-API-038; the value is pinned rather than enumerated because this type has exactly one.",
+      "type": "string",
+      "const": "authz_error"
+    },
+    "code": {
+      "description": "MOS-API-112, fixed: TRAINING_USE_NOT_PERMITTED. SCREAMING_SNAKE_CASE per MOS-API-037, stable per type.",
+      "type": "string",
+      "const": "TRAINING_USE_NOT_PERMITTED"
+    },
+    "retryable": {
+      "description": "MOS-API-112, fixed: false. Retrying changes nothing; a human has to record a TrainingDataPolicy (MOS-TRAIN-073).",
+      "type": "boolean",
+      "const": false
+    },
+    "trace_id": {
+      "description": "MOS-API-004: the same 32-hex value as the MedicalOS-Trace-Id response header.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

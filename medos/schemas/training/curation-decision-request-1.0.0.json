@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/curation-decision-request/1.0.0.json",
+  "title": "CurationDecision record request",
+  "description": "The body of POST /api/v1/harvest-candidates/{harvest_candidate_id}/decision, reserved by MOS-API-112 and registered in table 10.2-B row R3 against the permission curation_decision.record. Chapter 17 owns the entity (MOS-TRAIN-080, and MOS-TRAIN-204 for what reason_code may never mean); the columns are 0011_curation.up.sql's curation_decisions. candidate_id is the path parameter and is NOT a body member -- two places to name the candidate is one place to disagree. decided_by is NOT a member: MOS-TRAIN-080 requires a named human and the named human is the authenticated principal, never a value the caller supplies.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decision",
+    "review_seconds"
+  ],
+  "properties": {
+    "decision": {
+      "description": "MOS-TRAIN-080's closed set. defer is not terminal, so a candidate may accumulate deferrals and settle once (curation_decisions_settled_uk). There is no default and no absent value: MOS-TRAIN-080 forbids auto-inclusion, so a candidate with no settled decision is backlog, never an implicit include.",
+      "type": "string",
+      "enum": [
+        "include",
+        "exclude",
+        "defer"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "reason_code": {
+      "description": "MOS-TRAIN-080's closed set, required when and only when decision is exclude (curation_decisions_reason_ck). MOS-TRAIN-204: reason_code MUST NOT include any value whose meaning is a model outcome -- model_performed_poorly, outlier, hard_case or an equivalent makes the tool non-conformant -- which is why this is an enum here and screened again in medos/medos/training/vocabulary.py for the per-Dataset vocabularies a schema has never seen.",
+      "type": "string",
+      "enum": [
+        "quality_artefact",
+        "wrong_anatomy",
+        "wrong_phase",
+        "prior_treatment",
+        "duplicate_patient",
+        "geometry_unsupported",
+        "annotation_infeasible",
+        "out_of_scope"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "note": {
+      "description": "Reviewer note. MOS-STORE-272 and MOS-API-006: free text that MUST NOT carry PHI. The platform cannot check that, which is why the field is optional and why MOS-TRAIN-079 keeps every structured field of the candidate de-identified rather than relying on reviewer discipline.",
+      "type": "string",
+      "maxLength": 4096
+    },
+    "review_seconds": {
+      "description": "MOS-TRAIN-080: time on task, the queue's own quality signal. NOT NULL in the column, so required here; a queue whose median decision takes four seconds is a queue nobody read.",
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "allOf": [
+    {
+      "description": "curation_decisions_reason_ck as a schema constraint: (decision = exclude) = (reason_code IS NOT NULL). An exclusion without a reason is the mechanism by which a training corpus quietly becomes optimistic (MOS-TRAIN-081, MOS-TRAIN-203).",
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "exclude"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "required": [
+          "reason_code"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "reason_code"
+          ]
+        }
+      }
+    }
+  ]
+}

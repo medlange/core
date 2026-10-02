@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/training-run/1.0.0.json",
+  "title": "TrainingRun",
+  "description": "The wire form of one training_runs row: chapter 17's TrainingRun (MOS-TRAIN-124), physical form per 0013_training.up.sql. Response body of table 10.2-B rows R6, R7, R8 and R9. The entity is chapter 17's and is not redefined here. THREE COLUMNS ARE DELIBERATELY NOT PROJECTED, and the omissions are the part of this schema worth reading. (1) search_trial_score: MOS-TRAIN-222 forbids a selection statistic on any UI surface presenting model performance, and a per-run score placed on the run resource travels to every client that reads a run, including the one MOS-UI-154 forbids it on. The statistic that justified a nomination belongs on the ConfigurationSearch, which is the thing it describes. (2) hyperparameters: MOS-TRAIN-224 puts the training batch size in it and MOS-UI-149 forbids revealing that quantity as a value at all, so only hyperparameters_digest is projected -- enough to tell two runs apart, not enough to read the derived plan off the wire. (3) fingerprint_bucket, fingerprint_object_key, bundle_bucket and bundle_object_key: object-store locations. MOS-TRAIN-223 retains the fingerprint document for audit and forbids shipping it as an executable configuration, and MOS-TRAIN-141's argument -- a container that can name its own data can name the test partition -- applies unchanged to a client that can name its own objects. The digests are projected; the addresses are not.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "training_run_id",
+    "capability_id",
+    "dataset_version_id",
+    "dataset_version_digest",
+    "split_id",
+    "split_digest",
+    "fit_partition",
+    "select_partition",
+    "annotation_set_id",
+    "annotation_digest",
+    "preprocessing_spec_id",
+    "preprocessing_spec_version",
+    "preprocessing_spec_digest",
+    "code_commit",
+    "code_dirty",
+    "image_digest",
+    "training_backend",
+    "backend_rationale",
+    "hyperparameters_digest",
+    "search_id",
+    "trial_index",
+    "nominated",
+    "seeds",
+    "determinism",
+    "hardware",
+    "framework_versions",
+    "fingerprint_digest",
+    "state",
+    "failure_reason",
+    "started_at",
+    "finished_at",
+    "runner",
+    "bundle_digest",
+    "candidate_model_version_id",
+    "run_digest",
+    "created_at"
+  ],
+  "properties": {
+    "training_run_id": {
+      "description": "training_runs.public_id. MOS-CORE-028's prefix_ULID shape, uppercase Crockford base32 as MOS-API-111 fixes it for Job and 0013 renders it for this table.",
+      "type": "string",
+      "pattern": "^tr_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "capability_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "dataset_version_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "dataset_version_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "split_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "split_digest": {
+      "description": "Half the key of the test-exposure counter (MOS-TRAIN-216); row R11 reads the counter from this run rather than from a digest in a path segment, because MOS-UI-101 forbids requiring the operator to compose a digest.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "fit_partition": {
+      "description": "MOS-TRAIN-124's default, and 0013 constrains the column to the single value. Projected rather than omitted so that a reader can see the run never had a choice.",
+      "type": "string",
+      "const": "train"
+    },
+    "select_partition": {
+      "description": "MOS-TRAIN-215: the selection metric is computed on tune, or on cross-validation folds within train. test is not a member of this enum and cannot become one without 0013's CHECK failing first.",
+      "type": "string",
+      "enum": [
+        "train",
+        "tune"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "annotation_set_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "annotation_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "preprocessing_spec_id": {
+      "description": "MOS-IMG-045. MOS-TRAIN-136 makes the derived plan's transcription into this spec the registered one; MOS-UI-149 permits the console to display the derived quantities as read-only facts, and row 31 (GET /model-versions/{id}/preprocessing-spec) is where they are read from. They are not repeated here.",
+      "type": "string",
+      "minLength": 1
+    },
+    "preprocessing_spec_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "preprocessing_spec_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "code_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    },
+    "code_dirty": {
+      "description": "MOS-TRAIN-125: true blocks SUCCEEDED and does not block submit, because a dirty-tree run is a legitimate experiment and an illegitimate candidate. MOS-UI-151 classifies a code_dirty refusal as a platform fault under MOS-UI-160: the deployed training image was built from an uncommitted tree, which the operator neither caused nor can fix.",
+      "type": "boolean"
+    },
+    "image_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "training_backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "version",
+        "plan_digest"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "monai_supervised",
+            "nnunet",
+            "auto3dseg"
+          ],
+          "x-medicalos-enum": "closed"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "plan_digest": {
+          "description": "MOS-TRAIN-135: the self-configured plan is frozen at run start and recorded here. Null for monai_supervised, which derives no plan; 0013 carries the same exclusivity as a CHECK.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "backend_rationale": {
+      "description": "MOS-TRAIN-211. Null for every auto-configured run, which is every run this surface can produce.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 20
+    },
+    "hyperparameters_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "search_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "trial_index": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "nominated": {
+      "description": "MOS-TRAIN-216: exactly one trial per search. Set by row R15 and by nothing else; 0013's training_runs_one_nomination unique index makes that a database property rather than a convention in the driver.",
+      "type": "boolean"
+    },
+    "seeds": {
+      "description": "MOS-TRAIN-126: recorded, never asserted. MOS-TRAIN-127 characterises a capability from at least three runs differing only in these, which is what MOS-UI-157 offers to queue.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "python",
+        "numpy",
+        "torch",
+        "dataloader_worker_base"
+      ],
+      "properties": {
+        "python": {
+          "type": "integer"
+        },
+        "numpy": {
+          "type": "integer"
+        },
+        "torch": {
+          "type": "integer"
+        },
+        "dataloader_worker_base": {
+          "type": "integer"
+        }
+      }
+    },
+    "determinism": {
+      "description": "MOS-TRAIN-126's settings as they were, not as they were meant to be. Bit-exact reproducibility MUST NOT be claimed, so nothing here asserts it was achieved.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "torch_use_deterministic_algorithms",
+        "cudnn_benchmark",
+        "cublas_workspace_config",
+        "tf32_allowed"
+      ],
+      "properties": {
+        "torch_use_deterministic_algorithms": {
+          "type": "boolean"
+        },
+        "cudnn_benchmark": {
+          "type": "boolean"
+        },
+        "cublas_workspace_config": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tf32_allowed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "hardware": {
+      "description": "MOS-TRAIN-127 refreshes a seed-variance characterisation when hardware.gpu_count changes materially, so the figure is answerable from the row rather than from memory.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gpu_model",
+        "gpu_count",
+        "driver",
+        "cuda",
+        "cudnn",
+        "nccl"
+      ],
+      "properties": {
+        "gpu_model": {
+          "type": "string"
+        },
+        "gpu_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "driver": {
+          "type": "string"
+        },
+        "cuda": {
+          "type": "string"
+        },
+        "cudnn": {
+          "type": "string"
+        },
+        "nccl": {
+          "type": "string"
+        }
+      }
+    },
+    "framework_versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "torch",
+        "monai",
+        "numpy",
+        "simpleitk"
+      ],
+      "properties": {
+        "torch": {
+          "type": "string"
+        },
+        "monai": {
+          "type": "string"
+        },
+        "numpy": {
+          "type": "string"
+        },
+        "simpleitk": {
+          "type": "string"
+        }
+      }
+    },
+    "fingerprint_digest": {
+      "description": "MOS-TRAIN-223 digests the fingerprint document and retains it for audit. The digest identifies it; the document itself is not served, because the same requirement forbids shipping it as an executable configuration and MOS-UI-149 forbids presenting it at all.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "state": {
+      "description": "MOS-TRAIN-124's five states, in 0013's CHECK order. MOS-UI-153 requires the console to render them in plain language and MUST NOT show these spellings; that is a rendering rule on the console and not a reason to invent a second vocabulary on the wire, which would be two enums to keep in step.",
+      "type": "string",
+      "enum": [
+        "PENDING",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "failure_reason": {
+      "description": "0013: non-null if and only if state is FAILED -- a CANCELLED run carries none, because cancellation is a deliberate act attributed to a person (MOS-UI-156) and not a failure. MOS-UI-158 splits a failed run into three categories and this platform serves only two of them from here: Refused is the 422 at submit (medos/medos/training/errors.py RunRefused) and never becomes a row at all, while Broke and Unusable are both state FAILED. Chapter 17 carries no column distinguishing the last two, so none is minted on the wire; the distinction is owed by chapter 17, not invented here.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "started_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "runner": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "bundle_digest": {
+      "description": "MOS-TRAIN-137: an ensemble is one artifact with one content digest or it is not registered.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "candidate_model_version_id": {
+      "description": "MOS-TRAIN-138 sets it in the same transaction that registers the bundle at lifecycle_status REGISTERED, so every candidate has exactly one producing run and every run has at most one candidate. Row R12 projects what became of it; this member is the id and nothing more.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "run_digest": {
+      "description": "MOS-TRAIN-124's full binding under JCS (MOS-EVID-008). 0013's UNIQUE (tenant_id, run_digest) makes a re-submission of the same binding a conflict rather than a second run, which is why row R6 stands without a required Idempotency-Key with a narrower gap than rows R1 and R3 do.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

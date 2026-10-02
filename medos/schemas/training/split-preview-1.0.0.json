@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/split-preview/1.0.0.json",
+  "title": "SplitPreview",
+  "description": "Response body of table 10.2-B row R25: the `Projected split` row of MOS-UI-115's composition panel. MOS-UI-116 requires it to come from a SERVER-SIDE evaluation of MOS-TRAIN-112's assign() over the current candidate set and forbids a second implementation in the browser, on the grounds that the two disagree on exactly the cohorts that sit near a bound -- which is every cohort where the preview matters. MOS-UI-117 requires the panel to be labelled a preview and the seal-time result to be authoritative, so `is_preview` and `authoritative` are members of the response rather than words the console is trusted to add: MOS-TRAIN-093 computes the real report from the sealed manifest and this computes the same arithmetic over a set that is still changing, which is a different object. THE PREVIEW CREATES NOTHING. No DatasetSplit row exists after this call, no assignment is persisted, and the response carries no split id -- MOS-EVID-028 makes a split a materialised manifest and never a seed or a projection, and a preview that minted an id would be a split by another name.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "harvest_batch_id",
+    "is_preview",
+    "authoritative",
+    "computed_at",
+    "included_patient_count",
+    "included_candidate_count",
+    "undecided_candidate_count",
+    "partition_patients",
+    "assignment_method",
+    "stratified_by",
+    "test_partition_floor",
+    "meets_test_partition_floor",
+    "patients_needed_for_test_floor"
+  ],
+  "properties": {
+    "harvest_batch_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "is_preview": {
+      "description": "MOS-UI-117, on the wire. Const rather than boolean: this route has no other mode, and a field that could be false is a field a console will one day read as an authority.",
+      "const": true
+    },
+    "authoritative": {
+      "description": "MOS-UI-117: the seal-time result is authoritative and this is not. Const false for the same reason `is_preview` is const true.",
+      "const": false
+    },
+    "computed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "included_patient_count": {
+      "description": "Distinct patient_key values among candidates whose settled decision is `include`. The unit of assignment is the patient and never the study (MOS-EVID-029, MOS-TRAIN-117), so this and not the candidate count is what the floor is judged against.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "included_candidate_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "undecided_candidate_count": {
+      "description": "Candidates with no settled CurationDecision. Non-zero means this preview describes a cohort that cannot yet be sealed at all -- seal_from_batch refuses on MOS-TRAIN-081 before anything is created -- and the console must render the number rather than a projection that quietly assumed them included or excluded.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "partition_patients": {
+      "description": "Patients per partition under MOS-TRAIN-112's 70/10/20. Chapter 7's four-value vocabulary exactly (MOS-EVID-031, MOS-EVID-033); `val` is not a value and `fold` is a different concept (MOS-EVID-030). `excluded` appears because MOS-EVID-031 requires a subset split to declare its excluded patients explicitly -- but MOS-UI-136 forbids the console OFFERING split-level exclusion, so on this surface the number is a report and never a control.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["train", "tune", "test", "excluded"],
+      "properties": {
+        "train": {"type": "integer", "minimum": 0},
+        "tune": {"type": "integer", "minimum": 0},
+        "test": {"type": "integer", "minimum": 0},
+        "excluded": {"type": "integer", "minimum": 0}
+      }
+    },
+    "assignment_method": {
+      "description": "The identity of the pure function that produced the projection, recorded so that the preview and the seal can be shown to have run the same one (MOS-TRAIN-112: assignment is a pure function evaluated once, whose output is the manifest). There is no seed member here and MUST NOT be one: MOS-EVID-028 forbids a split being a seed, and a preview that returned one would be an invitation to reproduce the split outside the platform.",
+      "type": "string",
+      "minLength": 1
+    },
+    "stratified_by": {
+      "description": "MOS-TRAIN-113's stratification dimensions, as evaluated. An empty array means the projection was unstratified and says so, rather than omitting the member and leaving the reader to assume either answer.",
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "test_partition_floor": {
+      "description": "MOS-TRAIN-114's floor, and the same floor chapter 7 sets on an acceptance cohort (MOS-EVID-026). Const: MOS-UI-142's refusal does its arithmetic against 30 and a wire field that could carry another number would make that copy wrong somewhere.",
+      "const": 30
+    },
+    "meets_test_partition_floor": {
+      "type": "boolean"
+    },
+    "patients_needed_for_test_floor": {
+      "description": "MOS-UI-107: the console MUST compute the remedy, not describe the constraint, and MOS-UI-142's worked refusal states a total-patient shortfall rather than a test-partition one. Zero when the floor is met. Computed here because MOS-UI-116's argument reaches the arithmetic as well as the statistic: a browser rounding 20 per cent of a patient count differently from the assigner would tell the operator to add a number of patients that does not fix it.",
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

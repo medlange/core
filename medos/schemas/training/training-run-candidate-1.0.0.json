@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/training-run-candidate/1.0.0.json",
+  "title": "TrainingRunCandidate",
+  "description": "What became of a TrainingRun's candidate, read-only, for table 10.2-B row R12. THIS IS EVERYTHING SECTION 19.3.7 GETS, AND THE ARGUMENT FOR THE SHAPE IS THE POINT OF THE SCHEMA. 19.3.7 is titled 'Promote -- blocked here, by design'. MOS-UI-167 requires the promotion control to be ABSENT -- not disabled, not hidden behind a permission check with a tooltip. MOS-TRAIN-003 makes the pipeline's terminal state a candidate at VALIDATED and says the pipeline MUST NOT be CAPABLE of producing any state beyond it; MOS-TRAIN-008 requires VALIDATED to APPROVED to be performed by a human holding artifact.approve; MOS-SEC-158 enforces the exclusion by the ABSENCE of the grant rather than by a check in code. So no route on this surface accepts an approval, a deployment, a cutover or a clinical_use_mode transition, and none is declared anywhere in medos/api/v1/routes.train.yaml's training block; tests/unit/test_permission_contract.py asserts that no training route binds any permission in medos.training.orchestrator.FORBIDDEN_PERMISSIONS or medos.training.candidate.FORBIDDEN_PIPELINE_PERMISSIONS, which is the same list chapter 17 already keeps. WHY A READ EXISTS AT ALL: MOS-UI-168 requires the console to render the candidate's terminal state as what it is -- built, measured, waiting for a decision by a named person -- and to NAME THE ROLE that makes it. Without one server-computed projection the console must join rows 30 and 43 itself and render a state no server asserted, which is the failure MOS-UI-116 rules out for the composition panel for the same reason. WHY IT IS NOT A DOSSIER: MOS-TRAIN-011 requires the promotion decision to be made against the full evidence set and MOS-UI-170 puts the dossier in 19.5, on a different surface, with the separation of duties that keeps it there, and says in terms that section 19.3.7 adds no path to it. This object is therefore deliberately thin: an id, a status, a verdict, an exposure count and a sentence about who decides. It carries no link, no href, no action and no deployment reference, and MOS-TRAIN-189's call-graph property -- extended to the console by MOS-UI-170 -- stays true of a client that reads it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "training_run_id",
+    "candidate_model_version_id",
+    "lifecycle_status",
+    "evaluation_run_id",
+    "criteria_verdict",
+    "test_exposure_count",
+    "promotion"
+  ],
+  "properties": {
+    "training_run_id": {
+      "type": "string",
+      "pattern": "^tr_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "candidate_model_version_id": {
+      "description": "MOS-TRAIN-138. Null until the run reaches SUCCEEDED and the bundle is registered; 0013's training_runs_candidate_state_ck carries the same implication.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "lifecycle_status": {
+      "description": "The artifact's lifecycle_status (MOS-REG-021), in medos.registry.lifecycle.LIFECYCLE_STATUSES['model_version'] order; the contract test asserts the two are the same list, so a lifecycle edit cannot leave this enum behind. MOS-TRAIN-139 makes VALIDATING and VALIDATED the only statuses the pipeline can cause, and the later values appear here only because a candidate someone else approved is still readable through this projection. MOS-UI-168 forbids the console rendering any of them in language implying the candidate is deployed, live, in use or available to clinicians -- APPROVED is a statement about the artifact and, per MOS-TRAIN-179, does not route a study, create a deployment or change what is serving.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "DRAFT",
+        "REGISTERED",
+        "VALIDATING",
+        "VALIDATED",
+        "APPROVED",
+        "DEPRECATED",
+        "SUSPENDED",
+        "RECALLED",
+        null
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "evaluation_run_id": {
+      "description": "The candidate EvaluationRun of MOS-TRAIN-140, on partition test. Created by the pipeline, never by a client (section 19.3.6); the run itself is read through row 43 and its per-case metrics through row 44, which is why neither is restated here.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^evr_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "criteria_verdict": {
+      "description": "MOS-EVID-083's three states, and MOS-UI-164 requires all three to be rendered distinctly: INDETERMINATE MUST NOT be folded into FAIL, visually or in wording, because one needs more data and the other needs a different model. Null before the evaluation has finished. No aggregate metric is projected here: MOS-UI-165 puts metric display under 19.5's honest-metric rule, MOS-EVID-056 fails a bare scalar at schema validation, and a headline number beside a verdict is the promotion UI MOS-TRAIN-011 calls non-conformant.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "PASS",
+        "FAIL",
+        "INDETERMINATE",
+        null
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "test_exposure_count": {
+      "description": "MOS-TRAIN-216 requires this figure in the approval dossier. It is repeated here, where the operator sees the candidate, because the split was spent by THIS run and the person who spent it is the one on this screen. Row R11 is the same number read from the run; the two come from one table and cannot disagree.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "promotion": {
+      "description": "MOS-UI-168's 'name the role that makes it', as data rather than as console copy. Every member is a const: this object states a fixed property of the platform, not a per-candidate computation, and a server that could vary it would be a server where promotion is sometimes available here.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "performed_on_this_surface",
+        "permission",
+        "transition",
+        "requirement"
+      ],
+      "properties": {
+        "performed_on_this_surface": {
+          "description": "Always false. MOS-UI-167: absent, not disabled. MOS-UI-106 adds the reason a false flag is safer than a greyed-out control -- a disabled override is an instruction to go and find someone who can press it, and a flag a client can only render as prose cannot be styled into one.",
+          "type": "boolean",
+          "const": false
+        },
+        "permission": {
+          "description": "MOS-TRAIN-008 and MOS-REG-021. Registered in section 8.3.2 at class governance, which MOS-UI-102 excludes from this surface entirely, and excluded from the pipeline identity by MOS-SEC-158 through the absence of the grant.",
+          "type": "string",
+          "const": "artifact.approve"
+        },
+        "transition": {
+          "type": "string",
+          "const": "VALIDATED -> APPROVED"
+        },
+        "requirement": {
+          "type": "string",
+          "const": "MOS-TRAIN-008"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/page-training-run/1.0.0.json",
+  "title": "Page<TrainingRun>",
+  "description": "The pagination envelope of MOS-API-015 over TrainingRun, for table 10.2-B row R7. The envelope is written out here rather than referenced from a generic Page schema because MOS-API-015 says 'MUST be exactly' and closes the object: a generic envelope with an items array of anything would have to be open at the point where the requirement is closed. No total member, by MOS-API-016 -- counting is an unbounded scan and this table grows per run. Ordering is MOS-API-018's created_at DESC, id DESC and is not client-selectable, so there is no sort member either.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "items",
+    "next_cursor",
+    "has_more"
+  ],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "https://spec.medicalos.org/schemas/v1/training-run/1.0.0.json"
+      }
+    },
+    "next_cursor": {
+      "description": "MOS-API-017: base64url of a JSON object carrying the sort key, the tie-break id and a fingerprint of the normalised filter set. Opaque; an SDK MUST NOT parse, construct or mutate it. MOS-API-015: null when has_more is false.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "has_more": {
+      "type": "boolean"
+    }
+  }
+}

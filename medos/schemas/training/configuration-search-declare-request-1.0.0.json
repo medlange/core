@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/configuration-search-declare-request/1.0.0.json",
+  "title": "ConfigurationSearch declare request",
+  "description": "The body of POST /api/v1/configuration-searches, table 10.2-B row R13, bound to configuration_search.declare. NOT A CONSOLE ROUTE, AND THAT IS THE FIRST THING TO SAY ABOUT IT: MOS-UI-150 forbids the no-code console launching a ConfigurationSearch, because a bounded budget, a declarative space and a nomination step are three decisions that operator has no basis for making while spending a resource they cannot see being spent. It is declared because MOS-TRAIN-213 defines a search as ANY procedure producing more than one trained artifact from one cohort and keeping a subset by a score computed on data -- an AutoRunner sweep, an nnU-Net configuration comparison, a learning-rate sweep, a checkpoint-epoch choice, an ensemble-membership choice -- and MOS-TRAIN-218 requires every one of them to produce a record, whether or not the tool calls itself AutoML. A platform that serves TrainingRun and not this one invites the search to be run outside the API and the record to be written afterwards, which is the audit trail MOS-TRAIN-216 calls cleaner-looking and worse. The verb is declare and not create: MOS-TRAIN-220 calls the act registration and refuses a space that violates its grammar, and MOS-SEC-034 pairs a create permission with a removal disposition that configuration_searches, being append-only under 0013's forbid_training_mutation, cannot be given here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "capability_id",
+    "dataset_version_id",
+    "split_id",
+    "annotation_set_id",
+    "space",
+    "strategy",
+    "seed",
+    "selection_metric",
+    "selection_partition",
+    "selection_rule",
+    "trials_planned",
+    "budget"
+  ],
+  "properties": {
+    "capability_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "dataset_version_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "split_id": {
+      "description": "Digests are server-read from the frozen row, as on row R6. read_partitions is not a member: MOS-TRAIN-214 filters the search driver, every trial process, the ranking step, the ensemble builder and any interactive session on the workspace to {train, tune}, and a caller that can name its own partitions is the caller that requirement exists to stop. 0013 constrains the column with read_partitions <@ ARRAY['train','tune'] and the server writes it.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "annotation_set_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "parent_search_id": {
+      "description": "MOS-TRAIN-217: a trial that was not nominated MAY be nominated later, and doing so MUST be a new ConfigurationSearch row referencing the original here, carrying a rationale and incurring a fresh increment of test_exposure_count. A silent second nomination off the back of a first test run is selection on test performed one candidate at a time, so re-nomination is a new row rather than an edit -- which is also why there is no PATCH on this resource.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "space": {
+      "description": "MOS-TRAIN-220: a declarative document with a fixed grammar, digested under JCS (MOS-EVID-008). It MUST NOT be a Python callable, an expression string, a lambda or a template evaluated at search time, for the reason MOS-EVID-076 gives for AcceptanceCriteria -- a space that is code has no digest that means anything. The grammar below is medos/medos/training/search.py space_problems(), rendered as a schema so that the commonest violations are a 422 before a row exists rather than a refusal after one. The one check a schema cannot make is the overlap between derived_from_fingerprint and the axis names, which depends on the values rather than the shape; space_problems() makes it and the server refuses.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "axes"
+      ],
+      "properties": {
+        "axes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "values"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "values": {
+                "description": "Enumerated, always. A range, a distribution or a generator would be a space nobody can reproduce from its digest.",
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          }
+        },
+        "derived_from_fingerprint": {
+          "description": "MOS-TRAIN-220: a field named here MUST NOT also appear as a search axis. A quantity cannot be both derived from the cohort and searched over, and a space that does both silently overwrites the frozen value with the searched one (MOS-TRAIN-223, MOS-TRAIN-225).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "constraints": {
+          "description": "The one constraint form MOS-TRAIN-220 shows, as medos/medos/training/search.py _forbidden() reads it: a point is excluded when every member of when matches and every member of forbid matches.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "when",
+              "forbid"
+            ],
+            "properties": {
+              "when": {
+                "type": "object"
+              },
+              "forbid": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "strategy": {
+      "description": "0013's CHECK, verbatim. MOS-TRAIN-235 makes the trial sequence for grid and random a pure function of the space digest, the seed and the fingerprint digest, which is why seed is a required member and not a server convenience.",
+      "type": "string",
+      "enum": [
+        "grid",
+        "random",
+        "adaptive"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "selection_metric": {
+      "type": "string",
+      "minLength": 1
+    },
+    "selection_partition": {
+      "description": "MOS-TRAIN-215: the selection metric MUST be computed on tune, or on cross-validation folds within train expressed as the fold member of the split manifest line (MOS-EVID-030). test is not a value of this enum, here or in 0013's CHECK, and the AcceptanceCriteria are evaluated only against a partition no search, no tuning step and no model selection ever touched.",
+      "type": "string",
+      "enum": [
+        "tune",
+        "train"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "selection_folds": {
+      "description": "Required exactly when selection_partition is train, forbidden otherwise; 0013 carries the same biconditional as a CHECK and the allOf below carries it on the wire.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "selection_rule": {
+      "description": "At least ten characters, per 0013. A rule nobody wrote down is a rule the ranking step invented.",
+      "type": "string",
+      "minLength": 10
+    },
+    "trials_planned": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "budget": {
+      "description": "MOS-TRAIN-234: the compute budget MUST be bounded before the search starts and MUST be recorded, and an absent bound is a registration error, not an unlimited one. All five are required here for that reason -- a schema that made any of them optional would make 'unbounded' expressible, which is the single thing the requirement rules out. The orchestrator stops at the first bound reached and records which one in cost.stop_reason; a budget-terminated search that nominated nothing is a legitimate outcome and MUST NOT be papered over by relaxing the bound and resuming, so there is no PATCH on this resource and no widen member here.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_trials",
+        "max_gpu_hours",
+        "max_wall_clock_hours",
+        "max_ensemble_members",
+        "max_footprint_bytes"
+      ],
+      "properties": {
+        "max_trials": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_gpu_hours": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_wall_clock_hours": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_ensemble_members": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_footprint_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "required": [
+          "selection_partition"
+        ],
+        "properties": {
+          "selection_partition": {
+            "const": "train"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "selection_folds"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "selection_folds"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+# =====================================================================================
+# The VENDOR's image. Not MedicalOS's.
+#
+# `medicalos/medos:0.1.0.dev0` is the platform image: it carries `medos/medos/`, psycopg, numpy,
+# highdicom and a PACS-shaped worldview. This image deliberately shares none of it, because
+# chapter 2 section 2.5's mode table says what a sealed vendor ships and it is not that:
+#
+#     Vendor ships          | digest-pinned OCI image
+#     Weights location      | inside the vendor image; never surrendered
+#     Who executes inference| the service container, with its own runtime
+#     Isolation boundary    | container + NetworkPolicy + read-only rootfs
+#
+# So: one source file, one manifest, one weights blob, and a stock Python. If this
+# Dockerfile ever needs `COPY medos`, sealed mode has stopped being sealed and the review
+# should start there.
+#
+# WHAT IS DELIBERATELY ABSENT, AND WHY IT MATTERS FOR THE ISOLATION TEST
+#
+# No psycopg, no boto3, no kafka client. That is hygiene, not the boundary -- and it would
+# be a mistake to read it as the boundary. `tests/integration/test_sealed_mode.py` opens
+# RAW TCP SOCKETS from this container to Postgres, MinIO, Triton and the PACS, using the
+# `socket` module that every Python has. A container with no database driver can still
+# reach a database, and `MOS-SEC-004` is explicit that the enforcement must be the network
+# and "not only by configuration of the client". The absent drivers cost an attacker ten
+# minutes; the absent route costs them the machine.
+#
+# `MOS-SVC-029` requires the runtime image to be referenced by DIGEST in the manifest and
+# signed by the same identity as the artifact. `execution.sealed.image` in
+# `deploy/sealed-reference/service.manifest.json` is digest-pinned, as the requirement
+# demands and as chapter 2's acceptance check 3 tests; it names a registry this repository
+# does not publish to, because the compose stack builds locally. Registration against a
+# real registry is the registry component's path, not this file's.
+#
+# Spec: chapter 2 sections 2.5, 2.5.2; `MOS-SVC-029`, `MOS-SVC-050`, `MOS-SVC-058`;
+# chapter 8 `MOS-SEC-004`, `MOS-SEC-025`, `MOS-SEC-029`, `MOS-SEC-087`.
+# =====================================================================================
+FROM python:3.11.16-slim-bookworm
+
+# PYTHONDONTWRITEBYTECODE, and this one is load-bearing rather than tidy: the container
+# runs with `read_only: true` (MOS-SVC-050) and a __pycache__ write would fail at import.
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1
+
+# The vendor's program. It is `medos/medos/sealed/reference.py` in this repository because that
+# is where a reviewer can read it next to the platform half it is written against; it
+# imports NOTHING from `medos` (a sealed service that needed the platform's package would
+# not be sealed) and is copied here as the standalone file it is.
+COPY medos/medos/sealed/reference.py /opt/vendor/service.py
+
+# The manifest the image was built with. `GET /v1/manifest` serves exactly this document,
+# and section 2.6.2 step 3 compares its digest with the registry's -- so a rebuilt image
+# carrying an edited manifest is caught at dispatch rather than at the SEG.
+COPY medos/deploy/sealed-reference/service.manifest.json /opt/vendor/service.manifest.json
+
+# THE WEIGHTS. 4 KiB of deterministic bytes standing in for a checkpoint. Deterministic
+# because `MOS-SVC-026`'s self-test digest is a function of them and a random blob would
+# make the vendor's own declared digest unreproducible -- which is `MOS-SVC-075` in
+# miniature. No endpoint returns them: `tests/integration/test_sealed_mode.py` asks every
+# row of the ABI table for these bytes and fails if any row yields one of them.
+COPY medos/deploy/sealed-reference/weights.bin /opt/vendor/weights.bin
+
+# `execution.sealed.user: 65534` in the manifest, and the same number here. 65534 is
+# `nobody`, which exists in the base image; no `useradd` is needed and none is wanted --
+# a sealed container should not carry a user database it can write to.
+USER 65534:65534
+
+EXPOSE 8080
+CMD ["python", "/opt/vendor/service.py", \
+     "--manifest", "/opt/vendor/service.manifest.json", \
+     "--weights", "/opt/vendor/weights.bin", \
+     "--port", "8080"]

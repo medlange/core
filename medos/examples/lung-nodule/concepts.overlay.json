@@ -1,0 +1,152 @@
+{
+  "_comment": [
+    "Coded-concept ROWS for the `lung_nodule` capability (MOS-IMG-111, MOS-REG-042).",
+    "",
+    "THIS FILE IS DATA, NOT CODE. It is the `capability_concepts` rows a platform curator",
+    "inserts when the Capability is registered. MOS-IMG-113 forbids materialising a",
+    "clinical code list in Python as a table, a constant map or an enum, so every code",
+    "`medos/services/lung_nodule` emits is resolved out of here at run time and a missing key",
+    "RAISES (MOS-IMG-112: 'the writer MUST raise rather than invent a code').",
+    "",
+    "WHY AN OVERLAY AND NOT A SECOND DICTIONARY. `medos.core.concepts.ConceptDictionary`",
+    "loads ONE json file and `MEDOS_CAPABILITY_CONCEPTS` REPLACES the path wholesale --",
+    "there is no additive registration path, because the `capability_concepts` TABLE",
+    "MOS-IMG-111 names does not exist in this build and its stand-in is a file. Committing",
+    "a full copy of the base dictionary here would create exactly the second definition",
+    "CONTRACT.md section 2 exists to eliminate, and the two would drift on the first added",
+    "code. So this file carries ONLY the new rows and",
+    "`services.lung_nodule.concepts.compose()` merges it onto the base at deploy time,",
+    "refusing to redefine any key the base already owns. REPORTED as a platform gap, not",
+    "patched: see this component's report.",
+    "",
+    "CODE VALUES LONGER THAN 16 CHARACTERS. `NODULE_CANDIDATE_COUNT` (22) and",
+    "`NODULE_EQUIV_DIAMETER` (21) exceed the SH limit DICOM PS3.3 puts on `CodeValue`, so a",
+    "conformant writer -- highdicom, here -- carries them in `LongCodeValue` (UC) and omits",
+    "`CodeValue` entirely. VERIFIED on a written SR, not assumed.",
+    "",
+    "The consequence is worth knowing before it bites someone: a consumer that reads only",
+    "`CodeValue` silently drops exactly these two measurements, i.e. precisely the",
+    "non-standard ones a 99MEDOS code exists to make visible. The names are kept long",
+    "anyway, because the platform's own `param.operating_threshold`",
+    "(`OPERATING_THRESHOLD`, 19 characters) already sets that house style and a second,",
+    "shorter convention here would be worse than one consistent one. The SR-side assertion",
+    "in tests/integration/test_lung_nodule.py reads all three spellings."
+  ],
+
+  "concepts": {
+    "morphology.nodule": {
+      "coding_scheme": "SCT",
+      "code_value": "27925004",
+      "code_meaning": "Nodule",
+      "code_scheme_version": "2023-09-01",
+      "_note": [
+        "SNOMED CT morphologic-abnormality concept. It is the SegmentedPropertyType of",
+        "the SEG this capability produces, paired with category `category.abnormal`",
+        "(SCT:49755003 Morphologically Abnormal Structure) and anatomic region",
+        "`anatomy.lung` -- the triple DICOM PS3.16 TID 1411 expects for a lesion segment.",
+        "",
+        "A MORPHOLOGY AND DELIBERATELY NOT A DIAGNOSIS. It describes the shape of what was",
+        "outlined; it does not assert that the patient has a pulmonary nodule. The",
+        "diagnostic claim would be a clinical assertion that a Hounsfield threshold is in",
+        "no position to make."
+      ]
+    },
+
+    "finding.nodule_candidate": {
+      "coding_scheme": "99MEDOS",
+      "code_value": "NODULE_CANDIDATE",
+      "code_meaning": "Nodule candidate (algorithmic, not clinically validated)",
+      "code_scheme_version": "1.0.0",
+      "private_code_rationale": [
+        "This is the SR finding type, and no standard code says what is true here. SNOMED",
+        "CT 427359005 'Solitary nodule of lung' and RadLex RID3875 'nodule' both assert a",
+        "FINDING -- that a nodule is present. This capability is a threshold-and-connected",
+        "component detector with no clinical validation of any kind (see",
+        "METADATA.not_validated_for in medos/services/lung_nodule/service.py), so emitting",
+        "either of them would put a coded clinical assertion nobody made into a DICOM SR",
+        "that outlives the run.",
+        "",
+        "The private code carries the disclaimer INSIDE the code meaning, where a viewer",
+        "that renders the SR without reading our metadata still shows it. Promotion to a",
+        "standard code is forbidden until this capability has a ValidationReport meeting",
+        "an AcceptanceCriteria; review each minor release (MOS-IMG-114)."
+      ]
+    },
+
+    "quantity.nodule_candidate_count": {
+      "coding_scheme": "99MEDOS",
+      "code_value": "NODULE_CANDIDATE_COUNT",
+      "code_meaning": "Number of nodule candidates detected",
+      "code_scheme_version": "1.0.0",
+      "measurement_id": "nodule_candidate_count",
+      "ucum_unit": "1",
+      "ucum_unit_meaning": "(count)",
+      "computation_geometry": "source",
+      "private_code_rationale": [
+        "SNOMED CT, RadLex, DCM and LOINC were searched 2026-09 for a term expressing",
+        "'count of algorithm-detected candidate lesions'. The candidates are a property of",
+        "THIS algorithm's output at THIS parameter set, not a clinical quantity: the same",
+        "study yields a different count under a different HU threshold, which is why the",
+        "threshold travels with the number in METADATA.parameters. A standard code would",
+        "imply a study-level clinical count that is reproducible across methods, and it",
+        "is not. Review each minor release (MOS-IMG-114).",
+        "",
+        "UCUM '1' is the unity/dimensionless unit; MOS-REG-044 requires every measurement",
+        "to carry a non-empty UCUM unit, and a count has no other honest one."
+      ]
+    },
+
+    "quantity.nodule_equivalent_diameter": {
+      "coding_scheme": "99MEDOS",
+      "code_value": "NODULE_EQUIV_DIAMETER",
+      "code_meaning": "Equivalent spherical diameter of a detected candidate",
+      "code_scheme_version": "1.0.0",
+      "measurement_id": "nodule_equivalent_diameter_mm",
+      "ucum_unit": "mm",
+      "ucum_unit_meaning": "mm",
+      "computation_geometry": "source",
+      "private_code_rationale": [
+        "NOT a standard lesion-axis code, and the distinction is clinical, not cosmetic.",
+        "DICOM PS3.16 TID 1500 measurement groups code a LONG AXIS -- the longest calliper",
+        "a reader draws through the lesion, which is what Fleischner and Lung-RADS",
+        "thresholds are defined against. This number is something else: the diameter of",
+        "the sphere with the same VOLUME as the connected component,",
+        "d = (6V/pi)^(1/3). For a non-spherical lesion the two disagree, and the",
+        "equivalent diameter is systematically SMALLER than the long axis.",
+        "",
+        "Emitting this under a long-axis code would place it directly into a Fleischner",
+        "size band it was not measured for. A private code with the method in the code",
+        "meaning cannot be size-banded by accident. Review each minor release",
+        "(MOS-IMG-114)."
+      ]
+    }
+  },
+
+  "segment_profiles": {
+    "lung_nodule": {
+      "label": "Nodule candidate (HU threshold)",
+      "category": "category.abnormal",
+      "type": "morphology.nodule",
+      "anatomic_region": "anatomy.lung",
+      "finding_type": "finding.nodule_candidate",
+      "finding_sites": ["anatomy.lung"],
+      "_note": [
+        "One profile, therefore ONE SEG segment carrying the union of every accepted",
+        "candidate. Not one segment per candidate: `medos.writer.identity` indexes",
+        "segments by their profile slug (`{s.structure: ... for s in segments}`), so N",
+        "segments sharing this slug would collapse to one entry and silently lose every",
+        "candidate's measurements but the last. Per-candidate numbers ride as their own",
+        "SR measurement groups instead.",
+        "",
+        "The SEG label is 31 characters; DICOM SegmentLabel allows 64."
+      ]
+    }
+  },
+
+  "rtstruct_roi_map": {
+    "_comment": [
+      "Empty. This capability derives no mask from an RTSTRUCT -- LIDC-IDRI ships none,",
+      "and nothing here reads a reference segmentation."
+    ]
+  }
+}

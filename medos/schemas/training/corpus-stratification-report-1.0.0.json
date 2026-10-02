@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/corpus-stratification-report/1.0.0.json",
+  "title": "CorpusStratificationReport",
+  "description": "The wire form of one corpus_stratification_reports row: chapter 17's CorpusStratificationReport (MOS-TRAIN-088, MOS-TRAIN-091, MOS-TRAIN-092, MOS-TRAIN-093), physical form 0011_curation.up.sql. Response body of table 10.2-B row R5, permission corpus_stratification_report.read. MOS-TRAIN-088 requires the FULL result and not the verdict, so checks carries one entry per C1..C7 with its statistic, its bound and its outcome and none of the seven is optional. MOS-EVID-116 and MOS-TRAIN-089 keep institution names out of it: the C1 and C7 statistics are computed over institution_key, an HMAC, and the key itself is not projected. The row is append-only under MOS-STORE-359.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "corpus_stratification_report_id",
+    "harvest_batch_id",
+    "dataset_version_id",
+    "verdict",
+    "checks",
+    "computed_at"
+  ],
+  "properties": {
+    "corpus_stratification_report_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "harvest_batch_id": {
+      "description": "MOS-TRAIN-088: the report is recorded 'on the batch'.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "dataset_version_id": {
+      "description": "Null when the battery was run before anything was created -- MOS-TRAIN-088 also runs it when issuing a vendor_evidence report, and a dry run has no version to point at and is still a record.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "verdict": {
+      "description": "MOS-TRAIN-088: a fail MUST block sealing. MOS-TRAIN-092: warn outcomes MUST be reported and MUST NOT block -- C4 and C6 describe a corpus that is narrow, which the reader needs; C1, C2, C3, C5 and C7 describe a corpus that cannot support the claim being made from it.",
+      "type": "string",
+      "enum": [
+        "pass",
+        "warn",
+        "fail"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "checks": {
+      "description": "One entry per check of MOS-TRAIN-088's table. All seven keys are required, matching the column's CHECK (checks ?& array['C1',...,'C7']): a missing check is not a pass.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C7"
+      ],
+      "properties": {
+        "C1": {
+          "$ref": "#/$defs/check"
+        },
+        "C2": {
+          "$ref": "#/$defs/check"
+        },
+        "C3": {
+          "$ref": "#/$defs/check"
+        },
+        "C4": {
+          "$ref": "#/$defs/check"
+        },
+        "C5": {
+          "$ref": "#/$defs/check"
+        },
+        "C6": {
+          "$ref": "#/$defs/check"
+        },
+        "C7": {
+          "$ref": "#/$defs/check"
+        }
+      }
+    },
+    "computed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "check": {
+      "description": "One row of MOS-TRAIN-088's table as it was actually evaluated: what was measured, against what bound, with what outcome. observed and bound are carried as numbers so a reader can see the margin rather than the word, which is MOS-TRAIN-088's 'full result, not the verdict'. MOS-TRAIN-093 requires the whole report to be recomputable from acquisition_profile alone.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "statistic",
+        "observed",
+        "bound",
+        "outcome"
+      ],
+      "properties": {
+        "statistic": {
+          "description": "The statistic's name as MOS-TRAIN-088's table spells it, e.g. 'max share of patients from one institution_key'.",
+          "type": "string",
+          "minLength": 1
+        },
+        "observed": {
+          "type": "number"
+        },
+        "bound": {
+          "type": "number"
+        },
+        "outcome": {
+          "description": "MOS-TRAIN-092's three outcomes plus MOS-TRAIN-088's n/a, which C7 takes for a site_acceptance cohort where exactly one institution_key is permitted.",
+          "type": "string",
+          "enum": [
+            "pass",
+            "warn",
+            "fail",
+            "n/a"
+          ],
+          "x-medicalos-enum": "closed"
+        },
+        "waiver": {
+          "description": "MOS-TRAIN-091: a check MAY be waived only by writing this object, following the waiver discipline of MOS-EVID-036. There is no silent waiver, the waiver MUST be reproduced in full in every ValidationReport citing the cohort, and a waived C1 or C7 MUST additionally force the string 'single-site cohort' into the report's cohort summary.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "check_id",
+            "waived_by",
+            "waived_at",
+            "rationale",
+            "observed",
+            "bound"
+          ],
+          "properties": {
+            "check_id": {
+              "type": "string",
+              "enum": [
+                "C1",
+                "C2",
+                "C3",
+                "C4",
+                "C5",
+                "C6",
+                "C7"
+              ],
+              "x-medicalos-enum": "closed"
+            },
+            "waived_by": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            "waived_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1
+            },
+            "observed": {
+              "type": "number"
+            },
+            "bound": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  }
+}

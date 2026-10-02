@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/page-harvest-candidate/1.0.0.json",
+  "title": "Page<HarvestCandidate>",
+  "description": "The pagination envelope of MOS-API-015 over HarvestCandidate, for table 10.2-B row R24. No total member, by MOS-API-016 -- which has a second consequence on this route worth stating: the running exclusion tally MOS-UI-121 requires beside the cohort size is NOT this envelope's job and MUST NOT be derived by the console from the pages it has fetched. It is a column on the batch (candidate_count) and an aggregate on row R5, computed by the same implementation that runs at seal (MOS-UI-116).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["items", "next_cursor", "has_more"],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "https://spec.medicalos.org/schemas/v1/harvest-candidate/1.0.0.json"
+      }
+    },
+    "next_cursor": {
+      "description": "MOS-API-017: opaque, base64url, carrying the sort key, the tie-break id and the filter fingerprint. Null when has_more is false.",
+      "type": ["string", "null"]
+    },
+    "has_more": {
+      "type": "boolean"
+    }
+  }
+}

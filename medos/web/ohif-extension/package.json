@@ -1,0 +1,38 @@
+{
+  "name": "@medicalos/extension-medicalos",
+  "version": "0.1.0",
+  "description": "MedicalOS OHIF extension: 'Analyze with MedicalOS' toolbar button and the provenance panel (CONTRACT.md sections 9 and 10, MOS-SAFE-089a).",
+  "license": "MIT",
+  "private": true,
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "type": "module",
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "ohif-extension",
+    "medicalos",
+    "dicom",
+    "provenance"
+  ],
+  "peerDependencies": {
+    "@ohif/core": "^3.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@ohif/core": { "optional": true }
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "ohif": {
+    "comment": "Pinned against the viewer medos/deploy/compose/docker-compose.yml ships. The DEPLOYMENT pin (ohif/app:v3.9.2) is the binding one; MOS-REL-027 keeps the viewer replaceable, so this records what it was built against rather than constraining it.",
+    "builtAgainst": "v3.9.2",
+    "loadedBy": "runtime-url",
+    "loadComment": "OHIF 3.9's generated pluginImports.js hands any window.config.extensions entry that is not one of its own package names to a native dynamic import(). deploy/compose/ohif-config.js lists '/medicalos/src/index.js' and the pinned image imports this package unbuilt. See README.md section 2.",
+    "runtimeEntry": "src/index.js"
+  },
+  "comment_no_react": "React and react-dom were peer dependencies while src/panels/ProvenancePanel.jsx existed. That file is gone and nothing here imports React: a module loaded by a browser import() cannot resolve a bare specifier, and a second React copy would break the first hook the panel called. The panel is a custom element instead (README.md section 2.3).",
+  "scripts": {
+    "test": "node --test tests/"
+  }
+}

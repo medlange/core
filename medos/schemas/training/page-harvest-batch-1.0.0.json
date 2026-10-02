@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/page-harvest-batch/1.0.0.json",
+  "title": "Page<HarvestBatch>",
+  "description": "The pagination envelope of MOS-API-015 over HarvestBatch, for table 10.2-B row R22. Written out rather than referenced from a generic Page schema because MOS-API-015 says 'MUST be exactly' and closes the object. No total member (MOS-API-016); ordering is MOS-API-018's created_at DESC, id DESC.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["items", "next_cursor", "has_more"],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "https://spec.medicalos.org/schemas/v1/harvest-batch/1.0.0.json"
+      }
+    },
+    "next_cursor": {
+      "description": "MOS-API-017: opaque, base64url, carrying the sort key, the tie-break id and the filter fingerprint. Null when has_more is false.",
+      "type": ["string", "null"]
+    },
+    "has_more": {
+      "type": "boolean"
+    }
+  }
+}

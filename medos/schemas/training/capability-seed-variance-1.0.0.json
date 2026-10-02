@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/capability-seed-variance/1.0.0.json",
+  "title": "CapabilitySeedVariance",
+  "description": "The wire form of the live capability_seed_variance row (0013_training.up.sql section 5), for table 10.2-B row R10. MOS-TRAIN-127 requires at least three TrainingRuns differing only in seeds before a capability's first candidate is promoted, and MOS-UI-157 requires the console to display whether that characterisation exists and, when it does not, to offer to queue the two further runs that would produce one -- an operator who does not know this is owed will produce one candidate and discover the obligation at a gate they cannot reach. The response is 200 with characterised false rather than 404 when none exists: a 404 cannot tell 'this capability has no characterisation' apart from 'there is no such capability', and those need different screens. WHAT THIS SCHEMA MUST NOT CARRY, AND WHY IT IS ASSERTED RATHER THAN ASSUMED: the non-inferiority margin. MOS-TRAIN-128 renders sd BESIDE the declared margin in the approval dossier so an approver can see whether the gate can distinguish a real change from a re-run of the same code, and MOS-EVID-087 forbids tuning the margin to make a candidate pass; MOS-UI-157 repeats both, forbidding the console to compute, adjust or present the margin from this figure. A member here named delta, margin or non_inferiority_margin would put the two numbers in one document and invite exactly the arithmetic all three requirements forbid, so there is none, and tests/unit/test_permission_contract.py asserts the absence rather than trusting this paragraph.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "capability_id",
+    "characterised",
+    "runs_required",
+    "characterisation"
+  ],
+  "properties": {
+    "capability_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "characterised": {
+      "description": "False when no live capability_seed_variance row exists for this capability. MOS-UI-157's screen branches on exactly this.",
+      "type": "boolean"
+    },
+    "runs_required": {
+      "description": "MOS-TRAIN-127's 'at least three', as a number the console can subtract from rather than a sentence it has to parse. 0013 carries the same floor as CHECK (runs >= 3).",
+      "type": "integer",
+      "const": 3
+    },
+    "characterisation": {
+      "description": "Null exactly when characterised is false.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "runs",
+        "sd",
+        "training_run_ids",
+        "backend_kind",
+        "gpu_count",
+        "hyperparameters_digest",
+        "recorded_at"
+      ],
+      "properties": {
+        "metric": {
+          "description": "The metric the standard deviation is of. MOS-TRAIN-128 names it beside the margin; naming it is not the same as computing anything from it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "runs": {
+          "type": "integer",
+          "minimum": 3
+        },
+        "sd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "training_run_ids": {
+          "description": "The runs the figure is of. Projected because MOS-TRAIN-127 requires a refresh when the backend, the GPU count or the hyperparameter set changes materially, and 'is this characterisation still about the thing being promoted?' is answerable from these three plus this list. This member is why row R10 binds training_run.read rather than capability.read: the row names runs, and a principal who may not read a run may not read a list of them either.",
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          }
+        },
+        "backend_kind": {
+          "type": "string",
+          "enum": [
+            "monai_supervised",
+            "nnunet",
+            "auto3dseg"
+          ],
+          "x-medicalos-enum": "closed"
+        },
+        "gpu_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hyperparameters_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

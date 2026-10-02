@@ -1,0 +1,228 @@
+{
+  "schema_version": "1.0.0",
+
+  "capability_id": "lung_nodule",
+  "version": "0.1.0",
+  "status": "supported",
+  "display_name": "Lung nodule candidate detection (CT)",
+
+  "method_class": "deterministic_algorithm",
+
+  "concepts": {
+    "segment_profile": "lung_nodule",
+    "finding_type": "finding.nodule_candidate",
+    "segmented_property_type": "morphology.nodule"
+  },
+
+  "measurements": [
+    {
+      "measurement_id": "nodule_candidate_count",
+      "concept_key": "quantity.nodule_candidate_count",
+      "ucum_unit": "1",
+      "scope": "study",
+      "computation_geometry": "source",
+      "description": "How many connected components survived every filter. Changes with the parameters in METADATA.parameters, which is why they travel with it."
+    },
+    {
+      "measurement_id": "nodule_burden_volume_ml",
+      "concept_key": "quantity.volume",
+      "ucum_unit": "ml",
+      "scope": "study",
+      "computation_geometry": "source",
+      "description": "Total volume of the union of accepted candidates, V = N_voxels * dR * dC * dS / 1000 on the source grid (MOS-IMG-040)."
+    },
+    {
+      "measurement_id": "candidate_volume_ml",
+      "concept_key": "quantity.volume",
+      "ucum_unit": "ml",
+      "scope": "candidate",
+      "computation_geometry": "source",
+      "description": "One accepted candidate's volume, same formula, same grid."
+    },
+    {
+      "measurement_id": "candidate_equivalent_diameter_mm",
+      "concept_key": "quantity.nodule_equivalent_diameter",
+      "ucum_unit": "mm",
+      "scope": "candidate",
+      "computation_geometry": "source",
+      "description": "d = (6V/pi)^(1/3). NOT the long axis Fleischner size bands are defined against; see the private_code_rationale on the concept."
+    }
+  ],
+
+  "series_selector": {
+    "id": "sel_lung_nodule_ct_axial",
+    "version": "1.0.0",
+    "modality": ["CT"],
+    "min_instances": 40,
+    "body_part_hint": "CHEST",
+    "exclude_series_description": ["SCOUT", "LOCALIZER", "TOPOGRAM", "DOSE REPORT"],
+    "_note": [
+      "MOS-SVC-022: the platform evaluates this and hands the service the series it",
+      "selected; the service MUST NOT enumerate the study to pick its own.",
+      "",
+      "min_instances is 40 and not the platform floor of 2. A nodule detector needs",
+      "craniocaudal context: below ~40 slices at the spacings this envelope admits the",
+      "scan cannot cover the lungs, and every component a threshold finds is a partial",
+      "structure cut off by the scan extent. Refusing is honest; measuring is not.",
+      "",
+      "REPORTED, not patched: `medos.worker.selection` implements ONE selector,",
+      "`ct_largest_axial_v1`, with `SELECTABLE_MODALITIES` and `MIN_INSTANCES` as module",
+      "constants. A SeriesSelector document is not read by the worker in this build, so",
+      "the fields above are declared and enforced by this capability's own applicability",
+      "envelope rather than by the platform's selection step. Chapter 3 owns the",
+      "evaluation semantics that would make them platform-enforced."
+    ]
+  },
+
+  "applicability": {
+    "marginal_policy_default": "flag",
+    "constraints": [
+      {
+        "attribute": "modality",
+        "kind": "enum",
+        "values": ["CT"],
+        "reason_code": "input_constraint_unmet",
+        "rationale": "The thresholds below are Hounsfield units. They are meaningless on any other modality."
+      },
+      {
+        "attribute": "value_units",
+        "kind": "enum",
+        "values": ["HU"],
+        "reason_code": "input_constraint_unmet",
+        "rationale": "A series whose Modality LUT was not applied carries stored values, not HU. Thresholding those produces a number for every case and a correct one for none."
+      },
+      {
+        "attribute": "n_slices",
+        "kind": "range",
+        "min": 40,
+        "max": 1200,
+        "unit": "1",
+        "reason_code": "input_constraint_unmet",
+        "rationale": "See series_selector._note. The upper bound is a runtime guard, not a clinical one."
+      },
+      {
+        "attribute": "delta_s_mm",
+        "kind": "range",
+        "min": 0.4,
+        "max": 3.0,
+        "unit": "mm",
+        "reason_code": "outside_applicability_envelope",
+        "rationale": "The smallest candidate this reports is 4 mm across. At dS > 3 mm a 4 mm lesion occupies one or two slices, so its volume -- and therefore its equivalent diameter -- is dominated by partial-volume averaging rather than by the lesion. LIDC-IDRI contains series at 0.6 to 3.0 mm and the upper bound is the top of that range, so the envelope is declared where the data is, not beyond it."
+      },
+      {
+        "attribute": "pixel_spacing_max_mm",
+        "kind": "range",
+        "min": 0.3,
+        "max": 1.0,
+        "unit": "mm",
+        "reason_code": "outside_applicability_envelope",
+        "rationale": "A 4 mm candidate is 4 in-plane voxels across at 1.0 mm. Coarser than that and the shape filters -- which are the only thing separating a nodule from a vessel cross-section -- are measuring the sampling grid."
+      },
+      {
+        "attribute": "tilt_deg",
+        "kind": "range",
+        "min": -1.0,
+        "max": 1.0,
+        "unit": "deg",
+        "reason_code": "unsupported_geometry",
+        "rationale": "MOS-IMG-021 makes reject the default for gantry tilt and this build applies no tilt correction. A sheared grid makes the bounding-box aspect ratio -- an accepted candidate's vessel filter -- wrong in a direction that admits vessels."
+      },
+      {
+        "attribute": "resampled_from_source",
+        "kind": "enum",
+        "values": ["false"],
+        "reason_code": "unsupported_geometry",
+        "rationale": "MOS-IMG-039/041: the measurement is computed on the source grid. A resampled volume has no inverse transform here, and a label map built on it would not align with the source SEG frame."
+      }
+    ]
+  },
+
+  "acceptance_criteria": {
+    "id": "ac_lung_nodule",
+    "version": "0.1.0",
+    "status": "unmet",
+    "primary_metric": "sensitivity_per_nodule",
+    "evidence_reference": null,
+    "criteria": [
+      {
+        "id": "sens_nodule_4_30mm",
+        "metric": "sensitivity_per_nodule",
+        "bound": "min",
+        "value": 0.85,
+        "margin": 0.05,
+        "stratum": "nodule_4_30mm",
+        "operating_point_id": null,
+        "score_threshold": null,
+        "margin_rationale": "DECLARED AND UNMET. This is the bar a lung nodule capability would have to clear before any clinical deployment; nothing in this repository has measured it, `evidence_reference` is null and `status` is `unmet`. The number is the bar, NOT a claim about this detector -- the detector emits no score at all, so `operating_point_id` and `score_threshold` are null, and MOS-SVC-021 therefore forbids displaying a sensitivity for it anywhere. Recorded so that MOS-EVID-090 REFUSES a transition to clinical_use_mode: clinical, which is the intended consequence."
+      },
+      {
+        "id": "fp_per_scan",
+        "metric": "false_positives_per_scan",
+        "bound": "max",
+        "value": 4.0,
+        "margin": 1.0,
+        "stratum": "all",
+        "operating_point_id": null,
+        "score_threshold": null,
+        "margin_rationale": "Also declared and unmet, and stated because the sensitivity criterion alone is gameable by lowering the threshold until everything is a candidate. A connected-component detector with no classifier will not meet this; saying so up front is the point of writing it down."
+      },
+      {
+        "id": "small_nodule_floor",
+        "metric": "sensitivity_per_nodule",
+        "bound": "min",
+        "value": 0.6,
+        "margin": 0.1,
+        "stratum": "nodule_under_6mm",
+        "operating_point_id": null,
+        "score_threshold": null,
+        "margin_rationale": "The SUBGROUP FLOOR of section 7.9. `medos/medos/evidence/gate.py` is explicit that an aggregate cannot see a subgroup collapse -- 'passes a model that lost every sub-6 mm nodule' is the example it uses, and this is that stratum. Without this row a candidate that finds only large lesions clears the cohort-wide bar."
+      }
+    ],
+    "_note": [
+      "MOS-REG-049: the clinical bar belongs to the Capability and the registry MUST",
+      "reject a service_version that declares clinical thresholds in its own manifest.",
+      "None of these numbers appears in medos/examples/lung-nodule/service-version.manifest.json,",
+      "and tests/integration/test_lung_nodule.py asserts that separation."
+    ]
+  },
+
+  "clinical": {
+    "intended_use": "Research use only. Marks connected components in the lung fields of a chest CT whose size and shape are consistent with a nodule, so that a human reader can look at them. It is NOT a detection aid, NOT a triage tool, and its output is not evidence that a nodule is present or absent.",
+
+    "not_validated_for": [
+      "Everything. No ValidationReport exists, acceptance_criteria.status is `unmet`, and no sensitivity or false-positive rate has been measured on any cohort.",
+      "Exclusion of disease. An empty candidate list means this algorithm's filters admitted nothing; it does NOT mean the lungs are clear.",
+      "Sizing. `candidate_equivalent_diameter_mm` is the equivalent SPHERICAL diameter and is systematically smaller than the long axis Fleischner and Lung-RADS bands are defined against. It MUST NOT be read into a size band.",
+      "Ground-glass and sub-solid nodules. A candidate must reach -200 HU (detector.CANDIDATE_HU_MIN), so a lesion whose density lies below that is not detected at all -- and that is the class where detection matters most. A ground-glass nodule typically sits between -700 and -400 HU, i.e. entirely below this threshold.",
+      "Juxtapleural and juxtavascular nodules. Detection here is hole-finding inside the air phase: a lesion touching the pleura or a large vessel is contiguous with the chest wall or the hilum, reaches the crop face, and is discarded by construction.",
+      "Any modality other than CT, any series outside the applicability envelope above, and any population -- the algorithm has never been run against an annotated cohort."
+    ],
+
+    "known_failure_modes": [
+      {
+        "id": "LN-FM-001",
+        "text": "Vessel cross-sections are admitted as candidates. A pulmonary vessel running perpendicular to the axial plane is a compact, roughly circular, soft-tissue component of exactly the size of a small nodule, and no shape filter computed from a bounding box can separate the two.",
+        "detection": "human_review",
+        "mitigation": "method_class is `deterministic_algorithm` and the SR finding type is the private code `finding.nodule_candidate`, whose code MEANING carries the words 'not clinically validated' so a viewer that ignores our metadata still shows them. Every candidate is drawn in the SEG for a reader to dismiss."
+      },
+      {
+        "id": "LN-FM-002",
+        "text": "A lesion touching the pleura, the mediastinum or a hilar vessel is MISSED, not reported with lower confidence. The method finds structures enclosed by air; one that is contiguous with the body reaches the crop boundary and is dropped. In screening cohorts juxtapleural lesions are a large fraction of all nodules.",
+        "detection": "none",
+        "mitigation": "None available within this method. Stated here and in not_validated_for because no output of a run makes it visible -- a study with one juxtapleural lesion and nothing else returns present=False, which is why present=False is documented as 'the filters admitted nothing' rather than as a negative."
+      },
+      {
+        "id": "LN-FM-003",
+        "text": "The candidate count is a function of the HU threshold and the size window, not of the patient. Re-running at a different AIR_HU_MAX changes it, and two counts produced under different parameters are not comparable.",
+        "detection": "output_plausibility_gate",
+        "mitigation": "Every parameter is in METADATA.parameters and reaches result_measurements.method_detail through the worker's provenance step, so a stored number can always be re-derived. A run whose candidate count exceeds MAX_PLAUSIBLE_CANDIDATES rejects rather than reporting, because a three-figure count is a broken threshold and not a patient."
+      },
+      {
+        "id": "LN-FM-004",
+        "text": "Emphysematous, fibrotic and consolidated lung break the air-phase assumption. Consolidation removes the air that encloses a lesion; severe bullous disease creates air-filled cavities whose walls are enclosed soft-tissue components of nodule size and shape.",
+        "detection": "applicability_envelope",
+        "mitigation": "The envelope above cannot check for this -- no DICOM attribute carries it -- so the envelope does NOT catch it and this entry says so rather than implying otherwise. LIDC-IDRI contains such cases and they were not excluded from the run."
+      }
+    ]
+  }
+}

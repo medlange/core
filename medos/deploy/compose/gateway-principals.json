@@ -1,0 +1,63 @@
+{
+  "_comment_1": "MOS-DATA-005: the Gateway's configuration is delivered to the process at",
+  "_comment_2": "start-up from a secret store. On this laptop stack the 'secret store' is this",
+  "_comment_3": "read-only bind mount. It holds SHA-256 DIGESTS and no key: a file mounted into",
+  "_comment_4": "a container that holds a live credential is the posture MOS-DATA-005 forbids one",
+  "_comment_5": "layer down for the PACS credential, and a leaked copy of this file grants nothing.",
+  "_comment_6": "The matching plaintext keys are compose/nginx defaults, overridable from .env --",
+  "_comment_7": "see MEDOS_GATEWAY_VIEWER_KEY / MEDOS_GATEWAY_WORKER_KEY in docker-compose.yml.",
+  "_comment_8": "Replace this whole file (and both keys) before this stack faces anything real.",
+
+  "clinical_use_mode": "clinical",
+
+  "principals": [
+    {
+      "principal_id": "user:ohif-viewer",
+      "actor_kind": "user",
+      "tenant_id": "00000000-0000-0000-0000-000000000000",
+      "scopes": ["study.read"],
+      "key_id": "ohif-dev-v1",
+      "display": "OHIF viewer (single-tenant laptop stack)",
+      "key_sha256": "51c0703195da6e418e39938670232d2ef3a35681899e304d410dbb05c25db053",
+
+      "_why_user_and_not_service_account": [
+        "MOS-DATA-021 resolves `clinical_viewer` from a `User` with `study.read` under a",
+        "Deployment whose clinical_use_mode is `clinical`, and that is the row whose",
+        "egress column reads 'De-identification on egress: none'. A service_account here",
+        "would resolve to `service`, which MUST be de-identified, and the Gateway would",
+        "correctly refuse every retrieval with 503 deid_not_implemented.",
+        "REPORTED: this principal is the VIEWER, not the person using it. A real",
+        "deployment authenticates the clinician (OIDC) and this row disappears; until",
+        "then every clinical_viewer audit row names `user:ohif-viewer` and the",
+        "per-patient access trail cannot say WHICH clinician looked."
+      ]
+    },
+    {
+      "principal_id": "svc:medos-worker",
+      "actor_kind": "service_account",
+      "tenant_id": "00000000-0000-0000-0000-000000000000",
+      "scopes": ["study.read", "study.write"],
+      "key_id": "worker-dev-v1",
+      "display": "medos-worker: the platform DICOM writer",
+      "consumer_class": "platform_writer",
+      "key_sha256": "627e2fb0c0898f0f8030ccb74bd98fd8958190084332a4ba8f7e63e6c4b433fe",
+
+      "_why_platform_writer": [
+        "MOS-DATA-020: 'The platform DICOM writer (Chapter 4) is the only principal that",
+        "may STOW AI-derived objects, and it does so through the Gateway with a",
+        "`platform_writer` principal. It operates in the SOURCE UID space",
+        "(MOS-DATA-021), because the objects it writes must reference the study as the",
+        "hospital knows it.' medos-worker IS that writer: medos/medos/writer/{seg,sr}.py is",
+        "Chapter 4's writer and the worker is the process that runs it.",
+        "REPORTED AS A DEVIATION: the same process also RETRIEVES the source series, and",
+        "MOS-DATA-021 classes a retrieving ServiceAccount as `service`, which must be",
+        "de-identified. The weeks 1-2 worker is both the control-plane runner and the",
+        "capability host in one process, so it cannot be both classes at once, and the",
+        "source-UID-space half is the one that governs what it writes. When capabilities",
+        "move into real Service containers (Triton / sealed services), those containers",
+        "get their own `service` principals and de-identification stops being optional.",
+        "Until then this single override is where the gap is visible."
+      ]
+    }
+  ]
+}

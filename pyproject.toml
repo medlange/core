@@ -1,0 +1,260 @@
+# MedicalOS — weeks 1-2 vertical slice.
+# Layout and conventions are fixed by CONTRACT.md (§1 layout, §11 conventions).
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medos"
+version = "0.1.0.dev0"
+description = "medos SDK: model cards, preprocessing pipeline, DICOM SEG/SR writer, adapters (PACS, bus, inference); the platform is the reference local-mode app on top of it"
+requires-python = ">=3.11"
+# CORE dependencies are the SDK closure: everything `medos.sdk` (and the pure geometry it
+# re-exports) imports by name. The trainer image installs the distribution with
+# `--no-deps` and its own pins; an external consumer of the SDK gets exactly this set and
+# nothing heavier. Everything the PLATFORM (api/worker/gateway/evidence/training) needs on
+# top of the core lives in the `server` extra below, so `pip install medos` is the SDK
+# and `pip install medos[server]` is the platform. The split is held by
+# tests/unit/test_declared_dependencies.py and the closure gate in
+# tests/unit/test_shared_package_is_pure.py.
+dependencies = [
+    "numpy>=1.26",
+    "pydicom>=3.0.1",
+    "highdicom>=0.22",
+]
+
+[project.optional-dependencies]
+# THE PLATFORM'S DEPENDENCIES, separate from the SDK core so that installing the SDK does
+# not drag a web stack, a database driver or a crypto toolkit onto a machine that only
+# wants to read a model card and preprocess a volume.
+server = [
+    # CONTRACT.md §1: medos/medos/db has no ORM and no SQLAlchemy models. psycopg 3 is the
+    # driver, not a mapper: schema.sql is the only DDL and every statement in medos/medos/db
+    # is written out. `SELECT ... FOR UPDATE SKIP LOCKED` and `RETURNING` on a CTE-driven
+    # UPDATE (chapter 5 §5.6.3) are why a query builder would be in the way.
+    "psycopg[binary]>=3.1",
+    # CONTRACT.md §9 + §0: the HTTP surface is thin and is replaced by the Go control
+    # plane at weeks 3-5 (MOS-REL-084). FastAPI is here for one reason that survives that
+    # replacement — MOS-API-008's `additionalProperties: false` request validation with a
+    # per-pointer `violations[]` — and uvicorn is the ASGI server, not a framework choice.
+    # No ORM, no DI container, no background-task framework: anything clever in
+    # `medos/medos/api` is work that gets deleted.
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    # medos/medos/security/hashing.py: MOS-SEC-010 names argon2id with m=64MiB, t=3, p=1 as
+    # THE at-rest form of an API-key secret. It is not a choice this project gets to make
+    # and there is no stdlib argon2, so the dependency is load-bearing rather than
+    # convenient. `medos.api.app` imports the authenticator, so every process that serves
+    # HTTP needs it.
+    "argon2-cffi>=21.3",
+    # medos/medos/evidence/dsse.py: MOS-EVID-118 names Ed25519 inside a DSSE envelope as THE
+    # signature over a ValidationReport, and MOS-EVID-121 makes every report signed. Like
+    # argon2, this is not a choice the project gets to make and there is no stdlib
+    # Ed25519. Signing goes through this library and only this library; the verify-only
+    # RFC 8032 fallback in `dsse.py` exists so that `medicalos-verify` runs on an
+    # air-gapped workstation where installing a wheel is a change-control ticket, and it
+    # is cross-checked against this backend on the published test vectors.
+    "cryptography>=42",
+    # scipy: `medos/medos/evidence/leakage.py` computes MOS-EVID-037's perceptual hash with
+    # `scipy.ndimage.zoom`, and that hash is what MOS-EVID-034's L1-L5 leakage check
+    # compares. It was undeclared until it was measured: the import is unguarded and
+    # function-level, so a fresh install did not fail at startup -- it failed inside a
+    # SAFETY GATE, at the moment the gate ran. A dependency of a check is a dependency.
+    "scipy>=1.11",
+    # pydantic / starlette / anyio: reached transitively through fastapi, and imported
+    # DIRECTLY by `medos/medos/api` (24 import statements across the three). A transitive that
+    # the code imports by name is an undeclared dependency wearing a disguise: it works
+    # until fastapi changes a pin, and then it fails somewhere that does not mention
+    # fastapi. MOS-API-008's validation surface is built on pydantic models, so the
+    # coupling is real and is better written down.
+    "pydantic>=2.7",
+    "starlette>=0.37",
+    "anyio>=4.2",
+    # requests: the DICOMweb client, the gateway backend and the KServe v2 inference
+    # driver all speak HTTP through it. Server-side: nothing under `medos.sdk` imports it.
+    "requests>=2.31",
+]
+# httpx: `tests/integration/test_api.py` drives a real uvicorn server over a loopback
+# socket rather than an in-process ASGI shim, because the two defects it pins (a REJECTED
+# job is a 200; the SSE stream resumes from Last-Event-ID) are wire-level claims.
+#
+# nibabel: `tests/_support/phantom_cohort.py` writes NIfTI, and
+# `tests/unit/test_segmentation_alignment.py` imports `medos/tools/ingest/nnunet_dataset.py`,
+# which needs it. Without it that module raises SystemExit during COLLECTION, so the
+# suite does not report a failure -- it reports a collection error, which reads like a
+# broken checkout rather than a missing package. `tests/unit/test_declared_dependencies.py`
+# is what keeps this list honest.
+# `ruff` IS PINNED EXACTLY, AND IT IS THE ONLY ONE HERE THAT HAS TO BE.
+#
+# It was `ruff>=0.5`, and `requirements-dev.txt` did not mention it at all, so CI's lint
+# step installed whatever was newest on the day it ran. ruff adds rules and changes isort
+# between minor versions: measured on 0.16.7 against a tree nobody had touched for the
+# purpose, `ruff check medos/medos medicalos_preprocessing tests` reported 261 findings,
+# 90 of them I001 from an isort change. CONTRACT.md section 11 says "ruff clean", and a
+# gate whose verdict depends on the calendar cannot say whether a tree is.
+#
+# `MOS-REL-037` forbids a compatibility range on a recorded version. A linter version IS
+# a recorded version: it is the instrument a gate's verdict is measured with, exactly like
+# `backend_versions` in MEDOS_TRAINING_ENVIRONMENT. Raising it is a change with a diff.
+#
+# `dev` RE-STATES the `server` extra rather than referencing it: self-referential extras
+# are not reliably resolvable across pip/setuptools versions, and a development install
+# (`pip install -e ".[dev]"`) must keep producing a machine the whole default suite runs
+# on. `tests/unit/test_declared_dependencies.py` is what keeps the three lists honest
+# against the source's actual imports.
+dev = [
+    "pytest>=7.4", "ruff==0.16.7", "httpx>=0.27", "nibabel>=5.2",
+    "psycopg[binary]>=3.1", "fastapi>=0.115", "uvicorn>=0.30",
+    "argon2-cffi>=21.3", "cryptography>=42", "scipy>=1.11",
+    "pydantic>=2.7", "starlette>=0.37", "anyio>=4.2", "requests>=2.31",
+]
+
+# The `medos/tools/` scripts are NOT part of the platform and are not installed with it. They
+# are listed so that somebody converting a corpus or publishing a model can install what
+# they need without reading the source to find out. `medos/tools/ingest/nrrd_to_dicom.py` and
+# `nnunet_dataset.py` exist outside `medos/medos/` deliberately (MOS-IMG-069: the platform must
+# never mint a StudyInstanceUID), and their dependencies stay outside it too.
+# pynrrd: imported (guarded) only by the ingest/de-id tools under `medos/tools/`, never by
+# the platform package or the SDK.
+tools = ["nibabel>=5.2", "onnx>=1.16", "pynrrd>=1.0"]
+# The bus adapters' transports, one extra per broker. The SDK imports neither at module
+# load; a driver raises `DriverMissing` at CONSTRUCTION until its extra is installed.
+# Schemas are NOT part of these extras: the message shapes live in the deployment's
+# mapping profile (see examples/bus/), because they are the EXTERNAL system's contract.
+bus-kafka = ["confluent-kafka>=2.5"]
+bus-rabbit = ["pika>=1.3"]
+
+[tool.setuptools.packages.find]
+# TWO ROOTS, because `medos/` is a PRODUCT DIRECTORY and not a package. The package it
+# ships is `medos/medos/` — and that package now CONTAINS the SDK at `medos/medos/sdk/`,
+# which both images install with the rest of the distribution (`medos[sdk]` is the core
+# dependency set; the platform's own modules live in the same tree and import the SDK as
+# `medos.sdk`, the way the trainer does). Beside the package sit `api/`, `schemas/`,
+# `contracts/`, `services/`, `examples/`, `tools/` and `web/` -- data and scripts that
+# belong to the platform and are NOT part of the installed distribution.
+#
+# `include` is what keeps `tools` and `services` out: both carry an `__init__.py` and
+# would otherwise be found under the `medos` root and packaged, which would reverse the
+# decision recorded above -- "`tools/` scripts are NOT part of the platform".
+where = [".", "medos"]
+include = ["medos*"]
+# `exclude` IS LOAD-BEARING, AND IT IS NOT ABOUT `tools` AND `services` ANY MORE.
+#
+# `include` is applied to the MERGED result of both roots, and from the root `.` every
+# subdirectory of the PRODUCT directory matches `medos*` as a namespace package. Measured
+# before this line existed, the resolved package list held 78 names including
+# `medos.deploy.compose`, `medos.schemas.lung-nodule`, `medos.web.ohif-extension.src.panels`
+# and `medos.contracts` -- and setuptools infers `package-dir = {"medos": "medos/medos"}`
+# from the second root, so each of those resolved to a path under `medos/medos/` that does
+# not exist. `pip install -e .` failed outright with
+#
+#     error: package directory 'medos\medos\contracts' does not exist
+#
+# The image never saw it because its layout has no product directory: the Dockerfile does
+# `COPY medos/medos /app/medos`, so under `/app` the name `medos` IS the package and the
+# root `.` finds it directly. A build that works in the image and not in the repository is
+# the reason the Dockerfile's claim that `pip install .` "proves pyproject.toml's
+# packages.find actually resolves" was only ever true of one of the two layouts.
+#
+# Register entry 121. `tests/unit/test_packaging_surface.py` pins the resolved list, so a
+# new directory beside `medos/medos/` fails a check instead of joining the wheel.
+exclude = [
+  "medos.medos*",      # the package's own path seen from the root; the real one comes
+                       # from the second `where` entry with package-dir pointing at it
+  # NOT `medos.api`. The name exists under BOTH roots -- `medos/api/` is the route tables
+  # (YAML) and `medos/medos/api/` is the router package -- and `package-dir` sends the
+  # name to the second. Excluding it removed the routers from the distribution, which the
+  # package census below caught before this line was written.
+  "medos.api.v1*",     # the ROUTE TABLES under `medos/api/v1/` -- YAML, not a package.
+                       # `medos.api` itself is NOT excluded; see the note above.
+  "medos.contracts*",  # permissions.yaml and the other declarative contracts
+  "medos.deploy*",     # compose, Dockerfiles, nginx, provenance manifests
+  "medos.examples*",   # sample capability for third parties
+  "medos.schemas*",    # JSON Schemas served, not imported
+  "medos.web*",        # browser sources
+  "medos.tools*",      # NOT part of the platform -- the decision this file already records
+  "medos.services*",   # a capability is somebody else's code; MOS-REL-107
+]
+
+[tool.setuptools.package-data]
+# `capability_concepts.json` -- the coded-concept dictionary, and the ONE copy of it.
+#
+# It lived in `spikes/week0/` and `medos.capabilities.default_concepts_path()` reached up
+# out of the package to read it, which made a FROZEN SPIKE a runtime dependency of the
+# platform: `MOS-IMG-112` forbids inventing a code and `MOS-IMG-113` forbids materialising
+# the list in Python, so without this file `medos.writer` refuses to write at all. The
+# image worked around it with a `COPY` and `MEDOS_CAPABILITY_CONCEPTS`, which is what a
+# path outside the distribution costs.
+#
+# Declared here rather than left to `include-package-data`, because the sdist/wheel would
+# otherwise carry the Python and not the JSON, and the failure arrives at the first write
+# on a deployed system rather than at build time.
+"medos.capabilities" = ["capability_concepts.json"]
+
+[tool.pytest.ini_options]
+# EVERY directory that holds tests, and `tests/unit/test_suite_layout.py` asserts that it
+# is every one. `viewer/tests/` is the viewer's own suite: the viewer is a standalone
+# DICOMweb viewer and its tests read `viewer/` and nothing else, so they live with it and
+# run from it (`cd viewer && pytest tests`). They must ALSO run here -- a suite that moves
+# out of `testpaths` does not fail, it silently stops being counted, and 214 viewer tests
+# left the default run exactly that way when the tree moved out of `web/`.
+testpaths = ["tests"]
+# TWO ENTRIES for the same reason `packages.find` has two roots. `.` makes `tests`,
+# `viewer` and `trainer` importable; `medos` makes `medos` itself importable (it is
+# `medos/medos/`) -- and with it `medos.sdk`, the SDK both the platform and the trainer
+# import -- and keeps `tools` and `services` reachable under their own names, which is how
+# every existing `from tools.contracts import ...` keeps working after the move.
+pythonpath = [".", "medos"]
+markers = [
+    "slow: exercises a real container (Postgres, Orthanc) end to end",
+    # tests/e2e/test_demo.py drives the whole medos/deploy/compose stack over HTTP only. It
+    # SKIPS (never fails) when the stack is down, so it is safe in the default run; the
+    # marker exists so CI can select or deselect it: `-m e2e` / `-m "not e2e"`.
+    "e2e: drives the medos/deploy/compose stack end to end over HTTP, QIDO and SQL",
+    # docs/spec/15-delivery.md §15.1.2's release-0.1.0 gate: the five named checks that
+    # MOS-REL-004 requires green before the v0.1.0 tag, and over which it leaves no
+    # reviewer discretion. `pytest -m gate_0_1_0` runs exactly the gate and nothing else;
+    # tests/gate/conftest.py refuses a run that collects only some of the five.
+    #
+    # Registered HERE and not merely used, so that a typo in the marker name is an
+    # unknown-mark warning at collection rather than a gate that silently selects nothing.
+    "gate_0_1_0: a named check of the release-0.1.0 gate (docs/spec/15-delivery.md 15.1.2)",
+    # The release-0.2.0 gate row of docs/spec/15-delivery.md 15.1.2. Registered here for
+    # the same reason as the 0.1.0 marker: a typo becomes an unknown-mark warning at
+    # collection rather than a gate that silently selects nothing.
+    "gate_0_2_0: a named check of the release-0.2.0 gate (docs/spec/15-delivery.md 15.1.2)",
+    # The release-0.3.0 gate row of docs/spec/15-delivery.md 15.1.2: the four checks its
+    # gate cell defines, the four chapter-17 adds under MOS-TRAIN-193, and ONE check this
+    # repository added on top -- `migration-drift`. That addition is declared and argued
+    # in tests/unit/test_gate_contract.py's LOCAL_EXTRA, not smuggled in here.
+    "gate_0_3_0: a named check of the release-0.3.0 gate (docs/spec/15-delivery.md 15.1.2)",
+]
+
+[tool.ruff]
+# CONTRACT.md §11: Python 3.11, type hints everywhere, ruff clean.
+line-length = 96
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4"]
+ignore = [
+    # The lifted spike code uses `Any` and long explanatory comment blocks deliberately.
+    "B905",  # zip(strict=) — the lifted pairings are known-equal-length by construction
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-export surface.
+"medos/medos/core/__init__.py" = ["F401"]
+# CONTRACT.md §2 required the spike's logic to be MOVED, not rewritten. The bodies in
+# these modules are byte-identical to what `spikes/week0/` held, and reformatting them
+# would destroy the one property that made the lift auditable -- a `git diff` against the
+# spike showing only the module boundary move. The spike is deleted now, so that diff is
+# `git diff <the deleting commit>~1` rather than a working-tree one; the ignores stay for
+# the same reason they were written, which is that these lines are somebody else's and
+# were moved rather than authored. E501 = four long lines the spike wrote; E741 = one `l` loop
+# variable in the connected-components code. Fix them when that code is next changed for a
+# real reason, not as a side effect of the move.
+"medos/medos/core/dicomio.py" = ["E501"]
+"medos/medos/core/geometry.py" = ["E501"]
+"medos/medos/core/masks.py" = ["E741"]

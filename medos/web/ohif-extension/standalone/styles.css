@@ -1,0 +1,286 @@
+/* =====================================================================================
+ * MedicalOS panel styling.
+ *
+ * THE ONE RULE THIS STYLESHEET IS ACCOUNTABLE FOR
+ * -----------------------------------------------
+ * MOS-SAFE-089a: "It MUST render a REJECTED terminal state visually distinct from FAILED."
+ * MOS-EXEC-014 says why: a radiologist who sees a red error where the truth is "no thin
+ * axial recon exists in this study" chases an IT ticket, or assumes the study was cleared.
+ *
+ * So `.medos-rejected` and `.medos-failed` differ on FOUR channels, not one:
+ *   hue         amber/sand      vs  red
+ *   border      left rule 3px   vs  full 1px box
+ *   weight      normal          vs  semibold heading
+ *   wording     "Not analysed"  vs  "Analysis failed"  (in render.js, not here)
+ * Four channels because a single hue difference is invisible to a red-green colour-blind
+ * reader, which is roughly 8% of men, and this is the one distinction the spec gates a
+ * release on.
+ *
+ * Dark by default: it sits beside OHIF, which is dark, and a white panel next to a dark
+ * viewport is what makes people turn a panel off.
+ * ===================================================================================== */
+
+/* `:root` for the standalone page; `:host` for the OHIF panel.
+ *
+ * src/panels/provenance-panel.js renders into a SHADOW ROOT and links this same file.
+ * Inside a shadow tree `:root` matches nothing and neither does `body`, so a stylesheet
+ * that declared its tokens only on `:root` left the panel with black text on OHIF's dark
+ * background -- unreadable, and measured in a browser rather than reasoned about. One
+ * selector list keeps ONE set of tokens for both hosts, which is the same rule
+ * src/core/render.js follows for the markup: two renderings of one provenance record is
+ * the thing this package exists to avoid. */
+:root,
+:host {
+  --medos-bg: #0f1419;
+  --medos-surface: #161c23;
+  --medos-surface-2: #1d242d;
+  --medos-border: #2a333e;
+  --medos-text: #dce3ea;
+  --medos-text-dim: #8d9aa8;
+  --medos-accent: #4aa3df;
+
+  /* success */
+  --medos-ok: #3fb950;
+  --medos-ok-bg: rgba(63, 185, 80, 0.08);
+
+  /* REJECTED — a clinical outcome. Deliberately NOT red. */
+  --medos-rej: #d8a657;
+  --medos-rej-bg: rgba(216, 166, 87, 0.09);
+
+  /* FAILED — a technical error. */
+  --medos-fail: #f05a5a;
+  --medos-fail-bg: rgba(240, 90, 90, 0.09);
+
+  --medos-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+body,
+.medos-embedded-panel {
+  margin: 0;
+  background: var(--medos-bg);
+  color: var(--medos-text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+}
+
+/* The OHIF side-panel host. The tab OHIF draws around it is already scrolled and sized,
+ * so this only supplies the ground the tokens above assume and a gutter; it must not set
+ * a height, or the panel stops scrolling with the rest of the side panel. */
+.medos-embedded-panel {
+  padding: 8px;
+  min-height: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* ---- chrome ----------------------------------------------------------------------- */
+.medos-app-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--medos-border);
+  background: var(--medos-surface);
+}
+.medos-brand { display: flex; align-items: center; gap: 12px; }
+.medos-logo { font-size: 26px; color: var(--medos-accent); line-height: 1; }
+.medos-app-head h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: 0.01em; }
+.medos-tag { margin: 2px 0 0; font-size: 12px; color: var(--medos-text-dim); }
+.medos-viewer-link { color: var(--medos-accent); text-decoration: none; font-size: 13px; }
+.medos-viewer-link:hover { text-decoration: underline; }
+
+.medos-app {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px 20px 40px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .medos-app { grid-template-columns: minmax(0, 1fr); }
+}
+
+.medos-card {
+  background: var(--medos-surface);
+  border: 1px solid var(--medos-border);
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 0;
+}
+.medos-h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; letter-spacing: 0.02em; }
+.medos-h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--medos-text-dim);
+}
+.medos-sub { margin: 0 0 10px; font-size: 12px; color: var(--medos-text-dim); }
+
+/* ---- the form ---------------------------------------------------------------------- */
+.medos-field { display: block; border: 0; padding: 0; margin: 0 0 14px; }
+.medos-field-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--medos-text-dim);
+  margin-bottom: 5px;
+  padding: 0;
+}
+#study-uid {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--medos-bg);
+  border: 1px solid var(--medos-border);
+  border-radius: 5px;
+  color: var(--medos-text);
+  font-family: var(--medos-mono);
+  font-size: 12px;
+}
+#study-uid:focus { outline: 2px solid var(--medos-accent); outline-offset: -1px; }
+
+.medos-caps { display: flex; flex-direction: column; gap: 6px; }
+.medos-cap { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.medos-cap-note { color: var(--medos-rej); font-size: 11px; font-style: italic; }
+
+.medos-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.medos-btn {
+  padding: 8px 14px;
+  border-radius: 5px;
+  border: 1px solid var(--medos-border);
+  background: var(--medos-surface-2);
+  color: var(--medos-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.medos-btn:hover:not(:disabled) { border-color: var(--medos-accent); }
+.medos-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.medos-btn-primary { background: var(--medos-accent); border-color: var(--medos-accent); color: #07121b; font-weight: 600; }
+.medos-refresh { composes: medos-btn; }
+
+.medos-note { font-size: 12px; color: var(--medos-text-dim); font-family: var(--medos-mono); }
+.medos-note-error { color: var(--medos-fail); }
+.medos-fineprint { margin: 14px 0 0; font-size: 11px; color: var(--medos-text-dim); line-height: 1.6; }
+
+/* ---- status block ------------------------------------------------------------------ */
+.medos-status { border-radius: 6px; padding: 12px 14px; margin-bottom: 18px; }
+.medos-status-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.medos-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.medos-jobid { font-size: 11px; color: var(--medos-text-dim); }
+.medos-outcome-title { margin: 0 0 4px; font-size: 14px; }
+.medos-outcome-body { margin: 0 0 8px; font-size: 12.5px; color: var(--medos-text-dim); line-height: 1.55; }
+
+.medos-running { background: var(--medos-surface-2); border: 1px solid var(--medos-border); }
+.medos-phase { margin: 0 0 8px; font-size: 12px; color: var(--medos-text-dim); font-family: var(--medos-mono); }
+.medos-bar { height: 3px; background: var(--medos-border); border-radius: 2px; overflow: hidden; }
+.medos-bar-fill { height: 100%; background: var(--medos-accent); transition: width 0.3s ease; }
+
+.medos-success { background: var(--medos-ok-bg); border: 1px solid rgba(63, 185, 80, 0.35); }
+.medos-success .medos-badge { background: var(--medos-ok); color: #06210b; }
+.medos-success .medos-outcome-title { color: var(--medos-ok); font-weight: 600; }
+
+/* ---------- REJECTED: clinical. Amber, left rule, normal weight, no box. ------------- */
+.medos-rejected {
+  background: var(--medos-rej-bg);
+  border: 0;
+  border-left: 3px solid var(--medos-rej);
+  border-radius: 0 6px 6px 0;
+}
+.medos-rejected .medos-badge { background: var(--medos-rej); color: #241a06; }
+.medos-rejected .medos-outcome-title { color: var(--medos-rej); font-weight: 500; }
+
+/* ---------- FAILED: technical. Red, full box, semibold heading. ---------------------- */
+.medos-failed {
+  background: var(--medos-fail-bg);
+  border: 1px solid var(--medos-fail);
+  border-radius: 6px;
+}
+.medos-failed .medos-badge { background: var(--medos-fail); color: #2a0707; }
+.medos-failed .medos-outcome-title { color: var(--medos-fail); font-weight: 700; }
+
+.medos-reason { display: flex; align-items: baseline; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.medos-reason-code {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  word-break: break-all;
+}
+.medos-reason-detail { margin: 4px 0 0; font-size: 12.5px; }
+.medos-reason-detail-sm { font-size: 11px; color: var(--medos-text-dim); margin-top: 2px; }
+.medos-link { display: inline-block; margin-top: 8px; font-size: 12px; color: var(--medos-accent); }
+
+.medos-ruo {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--medos-border);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--medos-rej);
+}
+
+/* ---- provenance -------------------------------------------------------------------- */
+.medos-section { margin-bottom: 20px; }
+.medos-kv {
+  display: grid;
+  grid-template-columns: minmax(130px, 30%) minmax(0, 1fr);
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(42, 51, 62, 0.5);
+  font-size: 12.5px;
+}
+.medos-kv-k { color: var(--medos-text-dim); }
+.medos-kv-v { min-width: 0; overflow-wrap: anywhere; }
+.medos-missing { color: var(--medos-fail); font-style: italic; }
+.medos-kv-missing { background: var(--medos-fail-bg); }
+
+.medos-mono { font-family: var(--medos-mono); font-size: 11.5px; }
+
+.medos-scroll { overflow-x: auto; margin: 8px 0; }
+.medos-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.medos-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--medos-text-dim);
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--medos-border);
+  white-space: nowrap;
+}
+.medos-table td { padding: 6px 10px 6px 0; border-bottom: 1px solid rgba(42, 51, 62, 0.5); vertical-align: top; }
+.medos-row-selected { background: var(--medos-ok-bg); }
+.medos-decision { text-transform: lowercase; }
+.medos-kind { font-weight: 600; }
+.medos-num { font-family: var(--medos-mono); text-align: right; }
+
+.medos-finding { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12.5px; flex-wrap: wrap; }
+.medos-present { color: var(--medos-rej); font-weight: 600; }
+.medos-absent { color: var(--medos-text-dim); }
+.medos-note { font-size: 11.5px; color: var(--medos-text-dim); }
+
+.medos-empty { color: var(--medos-text-dim); font-size: 12.5px; font-style: italic; }
+.medos-ok { color: var(--medos-ok); font-size: 12px; margin: 14px 0 0; }
+.medos-warn { color: var(--medos-fail); font-size: 12px; margin: 10px 0 0; }
+
+/* ---- when embedded in OHIF's right panel ------------------------------------------- */
+/* OHIF panels are narrow; collapse the two-column key/value into stacked rows there. */
+.medos-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+@media (max-width: 420px) {
+  .medos-kv { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .medos-kv-k { font-size: 11px; }
+}

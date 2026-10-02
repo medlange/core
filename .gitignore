@@ -1,0 +1,50 @@
+# --- de-identification artefacts: NEVER commit ---
+# uid_map.jsonl holds SOURCE DICOM UIDs and is PHI-equivalent.
+# deid_secret.key is the only means of re-identification.
+.deid/
+.deid-*/
+*.key
+uid_map.jsonl
+backups/
+
+# --- datasets: never vendored into this repo ---
+# Public data: cite the TCIA DOI. Private clinical data: never leaves the clinic's control.
+data/
+datasets/
+*.dcm
+*.nrrd
+*.nii
+*.nii.gz
+*.mrml
+
+# --- recorded fixtures (generated DICOM derived from patient studies) ---
+# Copied out from under `spikes/week0/out/` before that directory was deleted, because a
+# fixture belongs to the test that reads it and should not be the last thing keeping a
+# directory alive. They are recordings the week-0 spike produced FROM patient studies, so
+# they are not redistributable and are in no clone; `tests/_support/skips.py` declares
+# them as the `recorded-fixtures` corpus and the tests that read them skip rather than
+# fail when they are absent.
+#
+# The five `spikes/**` lines that used to follow are gone with the directory. They covered
+# `out/`, two generations of fixture tree and the mutation scratch -- 62 MB of regenerable
+# binary that `verify_roundtrip.py fixture` rebuilt. Nothing rebuilds it now; what the
+# suite still needs is the JSON above, which is why it was copied out rather than ignored
+# one more time.
+tests/_recorded/
+*-report.json
+
+__pycache__/
+*.pyc
+.venv/
+
+# transient test-evidence dumps
+.ev-*.txt
+.evidence-*.txt
+.evidence/
+medos.egg-info/
+
+# --- trained model artefacts: never committed ---
+# A bundle is 392 MB for a conv U-Net and 4.1 GB for SegResNetDS (356M parameters). Weights belong
+# in an artifact store addressed by digest, not in git history: `MOS-REG-084` carries a ModelVersion
+# as OCI layers, and a bundle's identity is its `bundle_digest`, which `result.json` records.
+artifacts/

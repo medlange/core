@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/dataset-split/1.0.0.json",
+  "title": "DatasetSplit",
+  "description": "The wire form of one dataset_splits row (0006_evidence.up.sql section 5): chapter 7 section 7.4's frozen, patient-level split. Response body of table 10.2-B row R28. THERE IS NO ROUTE THAT CREATES ONE. A split is frozen only as the second half of row R26's single seal action, because MOS-UI-130 makes the seal one operator action spanning both operations and because a freeze route would have to accept `assignments` -- and a caller that names which patients are in `test` is exactly the container MOS-TRAIN-141 refuses, with an HTTP client in front of it. The server assigns by MOS-TRAIN-112's pure function; there is no seed anywhere in this entity and 0006_evidence says in its own table comment that no seed column exists and none MUST be added.\n\nTHE WHOLE leakage_report IS PROJECTED, NOT THE VERDICT. MOS-EVID-035 stores it verbatim and MOS-EVID-036 requires every waiver reproduced in full in any ValidationReport citing the split -- 'there is no silent waiver'. More to the point on this surface: MOS-EVID-037 makes a `skipped` L4 a permanent property of the split, and a projection carrying only `frozen: true` would hide, one screen later, precisely what row R27's check battery was built to make visible.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dataset_split_id",
+    "public_id",
+    "dataset_version_id",
+    "name",
+    "partition_level",
+    "partitions",
+    "partition_patients",
+    "assignment_method",
+    "stratified_by",
+    "leakage_report",
+    "split_digest",
+    "frozen_at",
+    "frozen_by"
+  ],
+  "properties": {
+    "dataset_split_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "public_id": {
+      "type": "string",
+      "pattern": "^spl_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "dataset_version_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "partition_level": {
+      "description": "MOS-EVID-029 and MOS-STORE-293: the unit of assignment is patient_key, and dataset_split_members has PRIMARY KEY (split_id, patient_key), which makes a patient in two partitions structurally impossible. The column CHECKs the single value and this is const for the same reason: a study-level split is not a narrower option, it is the defect L1 exists to catch.",
+      "const": "patient"
+    },
+    "partitions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["train", "tune", "test", "excluded"],
+        "x-medicalos-enum": "closed"
+      }
+    },
+    "partition_patients": {
+      "description": "Patients per partition. MOS-TRAIN-214 adds no fourth partition and `val` is not a value; `fold` is the optional cross-validation index WITHIN a partition (MOS-EVID-030) and conflating the two is how a tuning fold becomes a test set.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["train", "tune", "test", "excluded"],
+      "properties": {
+        "train": {"type": "integer", "minimum": 0},
+        "tune": {"type": "integer", "minimum": 0},
+        "test": {"type": "integer", "minimum": 0},
+        "excluded": {"type": "integer", "minimum": 0}
+      }
+    },
+    "assignment_method": {
+      "description": "MOS-TRAIN-112: assignment is a pure function evaluated once, whose output IS the manifest. A seed is an input to that one evaluation and a fact recorded here; it is never the split.",
+      "type": "string",
+      "minLength": 1
+    },
+    "stratified_by": {
+      "description": "MOS-TRAIN-113's dimensions. Empty means unstratified and says so.",
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "leakage_report": {
+      "description": "Stored verbatim in the column and projected verbatim here (MOS-EVID-034, MOS-EVID-035). The five top-level outcomes are the shape the ValidationReport cohort block of section 7.12.1 prints, so the report generator copies this object rather than re-rendering it into a second shape that can disagree with the first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["L1", "L2", "L3", "L4", "L5", "waivers", "detail"],
+      "properties": {
+        "L1": {"$ref": "#/$defs/leakage_outcome"},
+        "L2": {"$ref": "#/$defs/leakage_outcome"},
+        "L3": {"$ref": "#/$defs/leakage_outcome"},
+        "L4": {"$ref": "#/$defs/leakage_outcome"},
+        "L5": {"$ref": "#/$defs/leakage_outcome"},
+        "waivers": {
+          "description": "MOS-EVID-036's five required members per waiver. The console writes none and displays no control for one (MOS-UI-135), and MOS-TRAIN-115 makes a waiver on L1, L2, L3 or L5 incapable of permitting a training run in any case -- so an entry here is a governance act taken elsewhere, which this surface reports and never offers.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["check_id", "waived_by", "waived_at", "rationale"],
+            "properties": {
+              "check_id": {"type": "string"},
+              "waived_by": {"type": "string"},
+              "waived_at": {"type": "string", "format": "date-time"},
+              "rationale": {"type": "string", "minLength": 1},
+              "affected_pairs": {"type": "array", "items": {"type": "object"}}
+            }
+          }
+        },
+        "detail": {
+          "description": "Per-check hits and statistics, keyed by check id. For L4 it carries n_compared, n_skipped and the skipped series with their reasons, which is where MOS-EVID-037's 'explicit reason' lives once the split is frozen and the SealRun is history.",
+          "type": "object"
+        }
+      }
+    },
+    "split_digest": {
+      "description": "Chapter 7's split_digest; section 12.12 spells the column manifest_digest. MOS-TRAIN-124 binds it onto every TrainingRun, which is what makes 'the run was fitted against this split' a recomputable claim rather than a reference.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "frozen_at": {"type": "string", "format": "date-time"},
+    "frozen_by": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    }
+  },
+  "$defs": {
+    "leakage_outcome": {
+      "description": "MOS-EVID-034's four outcomes. `skipped` is not `pass`: MOS-EVID-037 requires the distinction and MOS-UI-144 requires the console to show it.",
+      "type": "string",
+      "enum": ["pass", "fail", "skipped", "waived"],
+      "x-medicalos-enum": "closed"
+    }
+  }
+}

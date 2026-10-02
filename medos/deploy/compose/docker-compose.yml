@@ -1,0 +1,1656 @@
+# =====================================================================================
+# MedicalOS -- weeks 1-2 vertical slice.  CONTRACT.md section 1 names this file.
+#
+# Five services and nothing else:
+#
+#   postgres      jobs, job_steps, job_events, job_series, results, ... , job_queue.
+#                 Also THE QUEUE (SELECT ... FOR UPDATE SKIP LOCKED). CONTRACT.md section 4.
+#   orthanc       the PACS. DICOMweb only.
+#   medos-api     POST /api/v1/jobs, GET /api/v1/jobs/{id}, the SSE stream.
+#   medos-worker  the claim loop and the eight-step executor.
+#   ohif          the viewer, plus the nginx that fronts the PACS and the API.
+#
+# ADDED AT WEEKS 3-5 (docs/spec/15-delivery.md 15.2.4) -- four more services:
+#
+#   minio         the model ARTIFACT store. Chapter 2 MOS-SVC-058: model weights are never
+#                 baked into a runner image. No imaging data and no PHI goes in here; the
+#                 only keys are models/{model_id}/{version}/... See medos/medos/objectstore/.
+#   medos-model-publish  a one-shot that uploads medos/deploy/models/ into minio and exits.
+#                 It is the packaging step's publish half (medos/tools/publish_model.py); the
+#                 BUILD half needs `onnx` and runs on a developer machine, never here,
+#                 because MOS-OPS-071 forbids the serving platform from performing a
+#                 backend conversion at all.
+#   triton        the single shared inference server 15.2.4 names. CPU mode: there is no
+#                 GPU on this host, so instance_group is KIND_CPU and the residency
+#                 arithmetic of chapter 13 13.10.3 runs against host memory. That
+#                 substitution is stated in medos/medos/inference/residency.py rather than
+#                 hidden, and MOS-OPS-090's nvidia-smi reconciliation is NOT stubbed.
+#   medos-tritond the administrator of that Triton (chapter 13 13.10) and the ONLY holder
+#                 of its model-control credential. Stages weights from minio, verifies
+#                 their sha256, writes the model repository, loads the pinned versions,
+#                 runs MOS-OPS-015's output-hash self-test, and serves the residency
+#                 reservation API on /internal/v1/residency/...
+#
+# WHAT IS STILL DELIBERATELY ABSENT (CONTRACT.md section 0)
+# ------------------------------------------------------------------------------------
+#   no kafka / redpanda   the queue is Postgres. A broker is 0.3.0 (JobQueue driver 2).
+#   no keycloak / auth    no auth, no tenancy, no RLS.
+#   (the gateway         CLOSED at weeks 3-5, 15.2.4 item 3. `medos-gateway` below is the
+#    shortcut is gone)    only container joined to the `pacs` network, the only holder of
+#                         a PACS credential (MOS-DATA-002), and the only thing the viewer
+#                         and the worker can reach DICOM through. MOS-OPS-005 is satisfied
+#                         for container-to-container traffic AND for the host: `orthanc`
+#                         publishes no port at all. See the SECURITY POSTURE block and
+#                         the comment on the service itself.
+#   no prometheus/grafana dashboards are weeks 3-5 (MOS-REL-016 ships the helpers, not the
+#                         dashboards).
+#
+# Adding any of them now would make this stack look like the target architecture while
+# still being the slice, which is the specific dishonesty 15.2.3 is written to avoid.
+#
+# IMAGE PINNING
+#   Every tag below is exact, down to the patch. `:latest` is banned and so is a
+#   major-only tag: the output of `pytest tests/e2e/test_demo.py` is a PASS/FAIL claim
+#   about a specific stack, and a floating tag turns that claim into an unreproducible
+#   anecdote. Chapter 14 MOS-TEST-068 goes further and pins the viewer by DIGEST; digests
+#   are registry- and platform-specific, so they are recorded per deployment rather than
+#   in this file.
+#
+# SECURITY POSTURE -- READ BEFORE COPYING ANY OF THIS INTO A REAL DEPLOYMENT
+#   Chapter 13 MOS-OPS-005 and MOS-DATA-006 require the PACS on a dedicated network
+#   "joined only by the PACS and the Gateway", with the viewer given no route to it. That
+#   is now the shape: `orthanc` joins ONLY the `pacs` network, `medos-gateway` joins both,
+#   and medos-api, medos-worker and ohif cannot resolve or reach `orthanc` at all.
+#   WHAT ASSERTS IT, AND WHAT STILL DOES NOT. An older version of this comment named a
+#   `tests/integration/test_gateway.py` that did not exist -- a coverage claim nobody
+#   could cash. That file exists now and asserts two halves of the shape against the
+#   RUNNING containers rather than against this text:
+#   `test_the_pacs_publishes_no_port_to_this_host` reads
+#   `docker inspect`'s NetworkSettings.Ports and fails on any binding, and
+#   `test_nothing_on_this_host_answers_as_the_pacs` checks the port is closed and not
+#   merely unmapped. THE OTHER HALF IS ALSO ASSERTED, and an earlier draft of this
+#   paragraph said it was not: `test_no_container_but_the_gateway_can_open_a_tcp_connection
+#   _to_the_pacs` (tests/integration/test_gateway.py) is exactly MOS-DATA-006's sentence --
+#   it opens a socket to the PACS port from inside the containers that must NOT reach it,
+#   and from the one that must. Understating coverage is a smaller sin than overstating it
+#   and it is still a false statement about this file, which is the whole subject of
+#   register entry 70.
+#
+#   NO DEVIATION REMAINS. THE PACS HAS NO HOST EXPOSURE AT ALL, AND MOS-DATA-006 HOLDS.
+#   `orthanc` declares no `ports:` block. `docker ps` prints an EMPTY ports cell for it --
+#   `8042/tcp` was the OLD symptom, printed while the inert block was still there and Docker
+#   was recording a binding it could not make. Nothing on this machine can open a TCP
+#   connection to the PACS, and nothing
+#   in the stack but `medos-gateway` shares a network with it. That is the whole of
+#   MOS-DATA-006 and MOS-OPS-005 for this deployment, with nothing held back for the
+#   convenience of the test harness.
+#
+#   An earlier version of this paragraph said the opposite -- "ONE DEVIATION REMAINS AND
+#   IT IS NOT HIDDEN: orthanc still publishes 127.0.0.1:8042" -- and it was FALSE, which
+#   is worse than either a clean posture or an honest hole. The `ports:` block it
+#   described was inert: Docker publishes no host port for a container attached only to
+#   an `internal: true` network, so the disclosed deviation had never existed. Meanwhile
+#   the three Orthanc probes in tests/_support/stack.py dialled that address and 29
+#   acceptance tests skipped permanently on it, which MOS-REL-012 makes equivalent to
+#   their requirements being unsatisfied. Register entry 70 records both halves.
+#
+#   THE FIXTURES REACH THE PACS THE WAY THE PLATFORM DOES, AND THAT IS THE POINT.
+#   DICOMweb goes through `medos-gateway` with a scoped bearer (MOS-DATA-002,
+#   MOS-DATA-017) -- the same route `medos-worker` and the viewer use, so the harness can
+#   no longer pass on a topology no user has. Orthanc's NATIVE REST API, which the
+#   QIDO/WADO/STOW triad has no DELETE verb for and which fixture teardown genuinely
+#   needs, is driven by executing `python3` INSIDE the orthanc container against its own
+#   loopback (tests/_support/stack.py::orthanc_native_rest). A PACS talking to itself is
+#   not "any other container", so MOS-DATA-006's sentence is untouched, and no host route
+#   is created for anyone -- attacker or test -- to find.
+#
+# USAGE
+#   docker compose -f medos/deploy/compose/docker-compose.yml up -d --build
+#   docker compose -f medos/deploy/compose/docker-compose.yml ps
+#   docker compose -f medos/deploy/compose/docker-compose.yml down        # keep the data
+#   docker compose -f medos/deploy/compose/docker-compose.yml down -v     # reset everything
+#
+#   Host ports are overridable so this stack can run beside another one -- which
+#   claims the same defaults: MEDOS_WEB_PORT / MEDOS_API_PORT / MEDOS_PG_PORT.
+#   MEDOS_ORTHANC_PORT is GONE and is not an oversight -- the PACS publishes no host port
+#   and must not (MOS-DATA-006); a variable that names one would invite someone to set it.
+# =====================================================================================
+
+name: medicalos-slice
+
+# =====================================================================================
+# WHICH CAPABILITIES THIS DEPLOYMENT SERVES. ONE ANCHOR, TWO CONTAINERS.
+#
+# `medos-api` decides at `POST /api/v1/jobs` whether a capability id is acceptable;
+# `medos-worker` decides at execute whether it can run it. If those two answers differ,
+# the deployment accepts jobs it cannot run: the submit returns 202, the job queues, the
+# worker raises `unknown capability_id` and the study FAILS with an internal error for a
+# reason that has nothing to do with the study. That is the failure this block exists to
+# make unreachable.
+#
+# So the value is written ONCE, as a YAML anchor, and merged into both `environment:`
+# blocks below. A hand edit to one service cannot change what the other serves, because
+# there is no second place to edit. `medos.capabilities.providers` is the single resolver
+# both processes read it through; a name this image does not ship, a provider that exposes
+# no `worker_registry`, one that returns something that is not a Mapping of Capability, or
+# one that collides with a platform capability id stops the container from starting and
+# names the provider.
+#
+# THE VALUE IS A NAME, NOT A MODULE PATH, AND THAT IS A REQUIREMENT AND NOT A PREFERENCE.
+# `MOS-REL-108` is unqualified -- "no shared-library loading, no dynamic module import, no
+# user-supplied code executed inside a platform process" -- and `MOS-CONF-109` then cites it
+# as the IEC 62304 section 4.3 segregation argument, "a segregation argument a reviewer can
+# execute rather than read". An earlier version of this file set a dotted path here and the
+# platform called `importlib.import_module()` on it, so executing that argument found the
+# mechanism it denies. The names below are keys of `medos/services/catalogue.py`, which imports
+# every capability this image ships with ordinary top-level imports; an unknown name is
+# refused with the known ones listed, and nothing tries to import it.
+#
+# `lung_nodule` is the capability 0.3.0 added under `medos/services/`, which until it was
+# catalogued ran only in tests. `medos/deploy/compose/Dockerfile` puts `medos/services/` and
+# `medos/examples/lung-nodule/` in the image and on PYTHONPATH; without both, this variable
+# refuses the container rather than quietly serving the platform three.
+#
+# To run the STOCK three capabilities, set MEDOS_CAPABILITY_PROVIDERS= (empty) in the
+# environment. An empty value is a deployment saying "no providers", which is a different
+# statement from a broken one and is the only way to get the platform defaults.
+#
+# MEDOS_CAPABILITY_REGISTRY_DIR is where a provider's composed coded-concept dictionary is
+# written. A BUILD ARTEFACT directory: rewritten from the overlay at every resolution, read
+# by nothing that did not just write it, and NOT a volume -- it must not survive an image
+# rebuild that changed the overlay.
+# =====================================================================================
+x-capability-providers: &capability-providers
+  MEDOS_CAPABILITY_PROVIDERS: "${MEDOS_CAPABILITY_PROVIDERS-lung_nodule}"
+  MEDOS_CAPABILITY_REGISTRY_DIR: /var/lib/medos/registry
+
+# =====================================================================================
+# MEDOS_DEID_PROVENANCE -- what this installation asserts about where its images came
+# from, and the one declaration in this file that is a statement about DATA rather than
+# about software.
+#
+# `MOS-EVID-021` makes a `pseudonymised` or `public_deidentified` DatasetVersion name both
+# a de-identification policy version and a UID mapping table, and `medos/medos/training/seal.py`
+# refuses the seal rather than invent either. READ WHAT IS AND IS NOT TRUE HERE BEFORE
+# CHANGING IT.
+#
+# WHAT IS TRUE OF THIS STACK, MEASURED RATHER THAN ASSUMED:
+#   * This installation performs NO de-identification. `medos/medos/gateway/app.py` answers 503
+#     DEID_NOT_IMPLEMENTED for the consumer classes that would need it; `studies` holds
+#     168 rows and 0 of them carry a `deid_policy_version`; `to_regclass(deid_policies)`
+#     is null because 0005_gateway defers that table to a migration nobody wrote.
+#   * So there is NO TENANT UID MAPPING TABLE and no tenant policy row to point at, and
+#     `MOS-EVID-021` asks for exactly those two things.
+#   * The images arrived already de-identified, by TCIA, under TCIA's published policy.
+#     Four studies are under TCIA's registered root 1.3.6.1.4.1.14519; the other 164 are
+#     synthetic fixtures this suite generates under 1.2.826.0.1.3680043.8.498 and have no
+#     patient behind them at all.
+#
+# SO THE TWO IDS BELOW NAME AN EXTERNAL AUTHORITY, NOT A TENANT ARTEFACT, and the prefix
+# says so. That is a reading of `MOS-EVID-021`, not a literal satisfaction of it: the
+# requirement says "the tenant UID mapping table of Chapter 3" and there is none. The
+# reading rests on the requirement's OWN stated reason -- "a DatasetVersion sealed under
+# one UID mapping is not interchangeable with the same images under another" -- which is a
+# comparability property, and for a public corpus the authority that fixes UID identity is
+# the publisher. `tcia:published-uids` names that authority truthfully; a made-up tenant
+# table id would name one nobody established, which is the thing the refusal text calls
+# out by name. Register entry 93 records the gap: `MOS-EVID-021` has no status for
+# "de-identified by a third party before ingest", although `MOS-TRAIN-073`'s legal-basis
+# enum already knows `public_corpus_licence` exists.
+#
+# THIS DECLARATION IS FALSE THE MOMENT A STUDY ARRIVES THAT TCIA DID NOT PUBLISH.
+# Clinic images are not covered by it and must not be sealed under it. That is not left to
+# vigilance: `tests/integration/test_deid_provenance_declaration.py` fails when any study
+# in the archive is outside the roots this declaration covers, so ingesting one turns the
+# suite red instead of quietly widening an immutable claim.
+# =====================================================================================
+# =====================================================================================
+# MEDOS_TENANT_SALT -- the key MOS-EVID-010's `patient_key` and MOS-TRAIN-089's
+# `institution_key` are HMAC'd under, and the one value in this file that is NOT a
+# configuration choice but a secret standing in for something that does not exist.
+#
+# `medos/medos/evidence/repo.py` already reports chapter 8's tenant keyring as an absent
+# dependency, in four words: "a salt in the repository is not a salt". That judgement is
+# correct and this block does not argue with it. What it does is say plainly that the
+# value below is a DEVELOPMENT STAND-IN, and pick one that cannot be mistaken for
+# anything else if it ever turns up in a log, a bug report or a copied .env.
+#
+# WHY A DEFAULT IS ACCEPTABLE HERE AND WOULD NOT BE IN A DEPLOYMENT THAT HOLDS PATIENTS.
+# A pseudonym is only a pseudonym while the key is secret; with the key in a public
+# repository, `patient_key` and `institution_key` are computable by anyone who can guess
+# the input. For what this stack holds that costs nothing: the four real studies are
+# TCIA's public corpus, whose patient ids (LCTSC-Test-S1-101 and friends) are already
+# published, and the other 164 are synthetic fixtures with no patient behind them. The
+# HMAC protects nothing that is not already public.
+#
+# THAT ARGUMENT IS ONLY TRUE WHILE THE ARCHIVE STAYS THAT WAY, and it is the same bound
+# the MEDOS_DEID_PROVENANCE block above depends on -- so the same guard covers both:
+# `tests/integration/test_deid_provenance_declaration.py` goes red the moment a study
+# arrives from outside TCIA's published roots. Clinic images ingested into this stack
+# therefore fail the suite BEFORE anyone seals a cohort whose institution keys are
+# derivable from a value committed to git.
+#
+# CHANGING IT LATER IS NOT FREE. Every `patient_key` and `institution_key` already
+# recorded was derived under the current value, and MOS-EVID-034's leakage checks compare
+# those keys across partitions. A new salt silently re-pseudonymises everything: old rows
+# and new rows stop matching, L1 stops detecting a patient in two partitions, and a
+# sealed DatasetVersion is no longer comparable with one sealed before the change. If it
+# must change, the cohorts sealed under the old value have to be re-sealed, not migrated.
+# =====================================================================================
+# =====================================================================================
+# MEDOS_ENV -- what kind of deployment this is, and the switch that makes every
+# development default below refusable.
+#
+# Until now this variable was read by two Python files and set by ZERO services, so the
+# mechanism that was supposed to keep development credentials out of production -- keys
+# are minted `mos_<env>_...` and the edge rejects a key whose environment does not match
+# -- had nothing to compare against and has never once been exercised.
+#
+# THE DEFAULT IS `dev` HERE AND UNSET EVERYWHERE ELSE, and the asymmetry is the whole
+# design. `medos/medos/config/devmode.py::is_dev_deployment` requires the value to be EXACTLY
+# `dev`; unset is NOT dev. So this file -- the development stack, in the repository --
+# says `dev` and everything in it works on a laptop. An operator who copies this file to
+# a real deployment and changes the database URL and the image tag, which is what
+# actually happens, changes nothing here and therefore gets a REFUSAL on the first
+# development default rather than a quiet acceptance of all of them.
+#
+# Read `medos/medos/config/devmode.py` before changing this. It also says, plainly, what this
+# cannot do: nothing stops an operator who sets `MEDOS_ENV=dev` on a deployment holding
+# patients. What it stops is the omission.
+# =====================================================================================
+x-environment-kind: &environment-kind
+  MEDOS_ENV: "${MEDOS_ENV-dev}"
+
+x-tenant-salt: &tenant-salt
+  # Carries `dev-stack-not-for-patients` so `refuse_dev_value_outside_dev` can recognise
+  # it. The marker is a sentence rather than a token because whoever reads it in a log or
+  # a copied .env may be meeting this platform for the first time.
+  MEDOS_TENANT_SALT: "${MEDOS_TENANT_SALT-dev-stack-not-for-patients-not-a-secret-committed-to-git}"
+
+x-deid-provenance: &deid-provenance
+  MEDOS_DEID_PROVENANCE: >-
+    ${MEDOS_DEID_PROVENANCE-{"deidentification_status":"public_deidentified",
+    "deid_policy_id":"tcia:ps3.15-basic-profile",
+    "uid_mapping_table_id":"tcia:published-uids"}}
+
+services:
+
+  # -----------------------------------------------------------------------------------
+  # Postgres: the job store AND the queue, in one database, on purpose.
+  #
+  # CONTRACT.md section 4: "The job row and the queue row MUST be committed in ONE
+  # transaction -- this is why the dual-write/outbox problem does not exist in this
+  # slice." That guarantee is only available while both live in the same database. Adding
+  # a broker here would reintroduce the exact problem the slice is designed to avoid, and
+  # is why `job_queue` is a table rather than a topic.
+  # -----------------------------------------------------------------------------------
+  postgres:
+    image: postgres:16.6-alpine
+    container_name: medos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${MEDOS_PG_USER:-medos}"
+      POSTGRES_PASSWORD: "${MEDOS_PG_PASSWORD:-medos}"
+      POSTGRES_DB: "${MEDOS_PG_DB:-medos}"
+      # Deterministic collation. Not cosmetic: `job_queue` is ordered by
+      # (priority, enqueued_at, id) and `results` is ordered by (created_at,
+      # capability_id); a locale-dependent text collation would make claim order and the
+      # idempotency-three-surface assertions depend on the host's LANG.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      # Read by 20-medos-migrate.sh. `0002_tenancy.up.sql` creates `medicalos_app` with
+      # LOGIN and no password on purpose -- credentials are deployment configuration, not
+      # schema. A real deployment sets this from a secret store; the default exists so the
+      # laptop stack comes up, and every published port here is bound to 127.0.0.1.
+      MEDOS_APP_PASSWORD: "${MEDOS_APP_PASSWORD:-medos_app}"
+    volumes:
+      # medos/medos/db/schema.sql is the ONLY DDL in this slice (CONTRACT.md section 8). The
+      # postgres image runs everything in this directory exactly once, on the first boot of
+      # an empty data volume -- which is precisely the contract `medos.db.conn.apply_schema`
+      # documents ("Apply schema.sql to an EMPTY database. Not a migration runner."). So the
+      # stack needs no init container and no migration step, and `down -v` is the reset.
+      - ../../../medos/medos/db/schema.sql:/docker-entrypoint-initdb.d/10-medos-schema.sql:ro
+      # Weeks 3-5, 15.2.4 item 1. `schema.sql` is still the baseline and is still the only
+      # file that creates the eight domain tables; everything after it is an ordered
+      # migration, because a deployment that already holds rows cannot be upgraded by
+      # rewriting the baseline. The script applies every *.up.sql and writes the same
+      # `schema_migrations` ledger `medos.db.migrate` writes.
+      - ./20-medos-migrate.sh:/docker-entrypoint-initdb.d/20-medos-migrate.sh:ro
+      - ../../../medos/medos/db/migrations:/medos-migrations:ro
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      # Published so the host-side e2e test and `psql` can reach it. medos.db.conn's
+      # DEFAULT_DSN is postgresql://medos:medos@127.0.0.1:5432/medos and this is the
+      # service it names.
+      - "127.0.0.1:${MEDOS_PG_PORT:-5432}:5432"
+    networks: [medos]
+    healthcheck:
+      # THIS USED TO BE `pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB`, and the comment
+      # above it claimed that naming the real database is "what makes
+      # `depends_on: service_healthy` mean schema.sql has been applied". It is not.
+      # `pg_isready` asks whether the server accepts connections; it does not authenticate
+      # and it does not select a database. Measured in this container:
+      #
+      #     pg_isready -U medos                  -d medos                     -> 0
+      #     pg_isready -U definitely_not_a_role  -d medos                     -> 0
+      #     pg_isready -U medos                  -d definitely_not_a_database -> 0
+      #     pg_isready -U definitely_not_a_role  -d definitely_not_a_database -> 0
+      #
+      # And during initdb the temporary server listens on /var/run/postgresql -- the exact
+      # socket pg_isready defaults to -- so it answers while 20-medos-migrate.sh is still
+      # running. With start_period 5s against a measured 56s migration run, every service
+      # that waits on `service_healthy` was released about fifty seconds before the schema
+      # existed, got UndefinedTable on tenant_id, and recovered via `restart:
+      # unless-stopped` -- which is why it read as a startup blip rather than an ordering
+      # bug. Register entry 119.
+      #
+      # This probe asks the question the comment always claimed to ask: is the LAST
+      # migration recorded. Measured: exit 0 on `medos`, exit 1 on the `postgres` database
+      # in the same cluster, where pg_isready returns 0.
+      test: ["CMD-SHELL", "psql -U $$POSTGRES_USER -d $$POSTGRES_DB -tAc \"SELECT 1 FROM schema_migrations WHERE version = '0015_seal_runs'\" | grep -q 1"]
+      interval: 3s
+      timeout: 3s
+      # RETRIES RAISED 30 -> 60. The probe above is false for the whole of the first boot,
+      # so the retry budget must outlast the migration run: 60 x 3s = 180s against 56s
+      # measured on this host, leaving room for a cold cache or a slower disk. The cost is
+      # that a genuinely dead Postgres takes three minutes to be declared unhealthy, which
+      # is the right trade for a check that now means something.
+      retries: 60
+      start_period: 5s
+
+  # -----------------------------------------------------------------------------------
+  # Orthanc: the PACS. Configuration is medos/deploy/compose/orthanc.json, lifted verbatim from
+  # the frozen week-0 spike, which verified this exact image against real LCTSC data.
+  # -----------------------------------------------------------------------------------
+  orthanc:
+    image: orthancteam/orthanc:25.2.0
+    container_name: medos-orthanc
+    restart: unless-stopped
+    environment:
+      # Orthanc's env-var overlay wins over orthanc.json. Auth defaults OFF because the
+      # browser-side OHIF has no way to present a credential and because CONTRACT.md
+      # section 0 removes auth from the slice. Flip it to "true" and set ORTHANC_PASSWORD
+      # to exercise the authenticated path -- medos.dicomweb.DicomWebGateway already reads
+      # MEDOS_DICOMWEB_USER / MEDOS_DICOMWEB_PASSWORD and is the ONLY place in `medos`
+      # that may hold them (CONTRACT.md section 1).
+      ORTHANC__AUTHENTICATION_ENABLED: "${ORTHANC_AUTH_ENABLED:-false}"
+      ORTHANC__REGISTERED_USERS: '{"medicalos":"${ORTHANC_PASSWORD:-change-me-in-dot-env}"}'
+      ORTHANC__VERBOSE_ENABLED: "${ORTHANC_VERBOSE:-false}"
+      VERBOSE_STARTUP: "true"
+    volumes:
+      - ./orthanc.json:/etc/orthanc/orthanc.json:ro
+      - orthanc-db:/var/lib/orthanc/db
+    # NO `ports:`, AND IF YOU ARE ABOUT TO ADD ONE, READ THIS FIRST.
+    #
+    # There used to be `- "127.0.0.1:${MEDOS_ORTHANC_PORT:-8042}:8042"` here, described as
+    # the one remaining MOS-DATA-006 deviation and kept so the host-side acceptance checks
+    # could drive Orthanc's native REST API. It never worked, and could not: `orthanc`
+    # joins only `pacs`, `pacs` is `internal: true`, and Docker publishes NO host port for
+    # a container whose only network is internal. It accepts the block, records it in
+    # HostConfig.PortBindings, starts the container healthy, and binds nothing --
+    # `docker ps` showed `8042/tcp` where every other service shows `127.0.0.1:P->P`.
+    # So the file disclosed a hole that did not exist while 29 acceptance tests skipped
+    # forever on an address the topology forbids. Register entry 70.
+    #
+    # The port is gone rather than made to work. Making it work means dropping
+    # `internal: true` or giving `orthanc` a second network, and either one is a REAL
+    # MOS-DATA-006 violation ("A deployment in which any other container can open a TCP
+    # connection to the PACS port is non-conformant, whether or not it has a credential")
+    # bought with 29 skips that had another answer.
+    #
+    # WHAT THE TESTS DO INSTEAD, so nobody has to rediscover it:
+    #   * DICOMweb -- through `medos-gateway`, exactly as `medos-worker` and the viewer do.
+    #     `tests/_support/stack.py`'s `dicomweb_url()` defaults to
+    #     `http://127.0.0.1:8043/dicomweb/<tenant>` with a bearer token (MOS-DATA-017).
+    #   * the NATIVE REST API, which DICOMweb has no DELETE verb for and which fixture
+    #     teardown genuinely needs -- by executing `python3` INSIDE this container against
+    #     its own loopback (`tests/_support/stack.py::orthanc_native_rest`). That is the
+    #     PACS talking to itself, which MOS-DATA-006's sentence does not reach, and it
+    #     needs no host route at all.
+    # MOS-DATA-006: "in `docker compose` it is a dedicated network joined only by the PACS
+    # and the Gateway". NOT `[medos, pacs]` -- membership IS the control, and an Orthanc on
+    # both networks is one `MEDOS_DICOMWEB_URL` typo away from a worker talking to the PACS
+    # directly, which is the failure MOS-DATA-002 is written about.
+    networks: [pacs]
+    healthcheck:
+      # /dicom-web/studies is the cheapest endpoint that proves three things at once: the
+      # HTTP server is up, orthanc.json parsed, AND the DICOMweb plugin loaded. Probing
+      # /system would go healthy on an Orthanc with no DICOMweb at all, which is precisely
+      # the failure the worker must not start against.
+      # python3 rather than curl/wget: orthancteam/orthanc:25.2.0 ships neither.
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import sys, urllib.request
+          r = urllib.request.urlopen("http://localhost:8042/dicom-web/studies", timeout=3)
+          sys.exit(0 if r.status in (200, 204) else 1)
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
+
+  # -----------------------------------------------------------------------------------
+  # medos-gateway: the DICOM Gateway. docs/spec/15-delivery.md 15.2.4 item 3.
+  #
+  # THE ONLY container joined to the `pacs` network, and therefore the only one that can
+  # open a TCP connection to Orthanc (MOS-DATA-006). THE ONLY holder of a PACS credential
+  # (MOS-DATA-002, MOS-DATA-005) -- grep this file for MEDOS_GATEWAY_PACS_ and you will
+  # find it on exactly one service. Every image byte the viewer renders and every instance
+  # the worker pulls now passes through here, which is what makes MOS-DATA-022's
+  # per-patient PHI-access audit row possible at all.
+  # -----------------------------------------------------------------------------------
+  medos-gateway:
+    image: medicalos/medos:0.1.0.dev0
+    build:
+      context: ../../..
+      dockerfile: medos/deploy/compose/Dockerfile
+    container_name: medos-gateway
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      orthanc:
+        condition: service_healthy
+    environment:
+      # The Gateway reads `studies` (MOS-DATA-010) and appends to `audit_events`
+      # (MOS-DATA-022) as `medicalos_app`, under the same forced row security as everything
+      # else. It is NOT privileged: the one cross-tenant read it performs is
+      # `study_owner_tenant()`, a SECURITY DEFINER function that returns one uuid
+      # (0004_gateway.up.sql section 5).
+      MEDOS_DATABASE_URL: "postgresql://medicalos_app:${MEDOS_APP_PASSWORD:-medos_app}@postgres:5432/${MEDOS_PG_DB:-medos}"
+
+      # ---- the PACS credential. MOS-DATA-005. --------------------------------------
+      # "The credential MUST be delivered to the Gateway process from a secret store at
+      # start-up and MUST NOT appear in any image layer, any Helm values file committed to
+      # the repository, or any environment variable of any other deployment unit."
+      # The laptop stack runs Orthanc with ORTHANC_AUTH_ENABLED=false, so there is no
+      # credential to deliver and these two are empty by default. Flip Orthanc's auth on
+      # and set them from .env (or a real secret store) and NOTHING else in this file
+      # changes -- that is the property the Gateway exists to give.
+      MEDOS_GATEWAY_PACS_URL: "http://orthanc:8042/dicom-web"
+      MEDOS_GATEWAY_PACS_BACKEND_ID: "orthanc-local"
+      MEDOS_GATEWAY_PACS_USER: "${ORTHANC_USER:-}"
+      MEDOS_GATEWAY_PACS_PASSWORD: "${ORTHANC_PASSWORD_FOR_GATEWAY:-}"
+
+      # ---- principals. Digests only; see the file's own header. ---------------------
+      MEDOS_GATEWAY_PRINCIPALS_FILE: /etc/medos/gateway-principals.json
+      MEDOS_CLINICAL_USE_MODE: "${MEDOS_CLINICAL_USE_MODE:-clinical}"
+
+      # Response-body URL rewriting: any document whose URLs name `http://orthanc:8042/...`
+      # hands the reader the PACS address (MOS-SEC-088 forbids that address being known to
+      # Z-EDGE at all) AND is unreachable, since MOS-DATA-006 just removed the route. This
+      # is the origin the BROWSER uses.
+      #
+      # NOT A SWITCH FOR THE SCRUB. Leaving it unset used to leave the backend origin in
+      # the body; `medos.gateway.app._gateway_uri_base` now rewrites to the relative
+      # `/dicomweb/{t}` instead, so an unset value costs absolute URLs and never costs
+      # confidentiality. Set it so the browser gets absolute ones.
+      MEDOS_GATEWAY_PUBLIC_BASE: "${MEDOS_GATEWAY_PUBLIC_BASE:-http://127.0.0.1:${MEDOS_WEB_PORT:-3000}}"
+
+      # MOS-DATA-023's two defaults, stated rather than implied.
+      MEDOS_GATEWAY_MAX_INFLIGHT: "${MEDOS_GATEWAY_MAX_INFLIGHT:-4}"
+      MEDOS_GATEWAY_MAX_INSTANCES: "${MEDOS_GATEWAY_MAX_INSTANCES:-5000}"
+
+      # The operator attribution of MOS-DATA-047: studies that were in the PACS before the
+      # Gateway existed have no `studies` row and are therefore invisible (MOS-DATA-013).
+      # Setting this names the tenant they belong to. It is EMPTY by default, because a
+      # reconciler with a default tenant is exactly the "assign unattributed data to a
+      # default tenant" that MOS-DATA-047 forbids.
+      MEDOS_GATEWAY_RECONCILE_TENANT: "${MEDOS_GATEWAY_RECONCILE_TENANT:-}"
+
+      MEDOS_LOG_LEVEL: "${MEDOS_LOG_LEVEL:-INFO}"
+      PYTHONWARNINGS: "ignore:The string :UserWarning"
+    volumes:
+      - ./gateway-principals.json:/etc/medos/gateway-principals.json:ro
+      - ./gateway-entrypoint.sh:/usr/local/bin/gateway-entrypoint.sh:ro
+    command: ["sh", "/usr/local/bin/gateway-entrypoint.sh"]
+    ports:
+      # Published so the host can reach the Gateway's HTTP surface. The viewer reaches it
+      # through the OHIF nginx on the same origin.
+      #
+      # `tests/integration/test_gateway.py` DOES exist and does drive this port -- an
+      # earlier version of this comment said it did not, and that was already wrong when it
+      # was written. It is now load-bearing: register entry 70 moved the integration and e2e
+      # DICOMweb fixtures onto this port, so it is the harness's only route to DICOM. Also
+      # looking at it is `tests/_support/stack.py`'s `medos-gateway` probe, which
+      # `pytest --require-stack` runs before the e2e suite. That probe is not a
+      # substitute for tests: it exists because the worker's MEDOS_DICOMWEB_URL below
+      # points HERE, so a dead Gateway means a platform that cannot fetch one instance,
+      # and before the probe existed the strict suite reported that state as 233 passed.
+
+      - "127.0.0.1:${MEDOS_GATEWAY_PORT:-8043}:8043"
+    # THREE networks, and it is the only service on more than two. `pacs` is where Orthanc
+    # is; `medos` is where the viewer, the worker and Postgres are; `sealed` is Z-SERVICE,
+    # and the Gateway is there because MOS-SVC-025 makes it the ONE destination a sealed
+    # vendor container may egress to ("`network.egress` MUST be a subset of
+    # ['dicom-gateway']"). That is also why the Gateway, and not the worker, is the thing
+    # that holds the PACS credential: the sealed service reaches DICOM through a component
+    # that authenticates it per request (MOS-SEC-026) rather than through one that trusts
+    # its network position.
+    networks: [medos, pacs, sealed]
+    healthcheck:
+      # /healthz, not /readyz: same split medos-api documents. Liveness must not fail
+      # because Postgres blinked.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          sys.exit(0 if urllib.request.urlopen("http://localhost:8043/healthz", timeout=3).status == 200 else 1)
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # -----------------------------------------------------------------------------------
+  # medos-api: the thin HTTP surface. CONTRACT.md section 0 -- "the HTTP layer MUST stay
+  # thin -- no business logic in handlers", because the Go control plane replaces it at
+  # weeks 3-5 (MOS-REL-084).
+  # -----------------------------------------------------------------------------------
+  medos-api:
+    image: medicalos/medos:0.1.0.dev0
+    build:
+      context: ../../..
+      dockerfile: medos/deploy/compose/Dockerfile
+    container_name: medos-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # REGISTER ENTRY 82'S EDGE WAS REMOVED, AND THE GUARANTEE IT BOUGHT IS INTACT.
+      # It used to wait on `medos-trainer-environment: service_completed_successfully`,
+      # so that the API was "either ready to train or absent, never up-and-lying".
+      #
+      # The cost of that was not visible until somebody ran this file on a laptop. The
+      # `&trainer-gpu` anchor reserves an nvidia device, so on a host with no NVIDIA
+      # container runtime the trainer-environment container cannot be CREATED -- and
+      # because this edge existed, medos-api never started, and because `ohif` waits on
+      # medos-api, the viewer never started either. A missing GPU took out the entire
+      # user-facing surface of a platform whose inference plane runs on CPU.
+      #
+      # WHY REMOVING IT IS SAFE RATHER THAN A TRADE. `TrainingEnvironment` is built PER
+      # REQUEST, not cached at import -- `medos/medos/api/routes_training.py` says so and gives
+      # the reason ("an environment cached at import is one an operator cannot correct
+      # without a restart"). So an API that starts before the declaration exists answers
+      # `503 TRAINING_ENVIRONMENT_NOT_RECORDED` until it does, and then simply stops. The
+      # refusal entry 82 relied on is the same refusal; what has gone is the wait.
+      #
+      # "Up and answering 503 on the training routes" is strictly better than "absent",
+      # and it is not up-and-lying: the 503 names exactly which of the nine keys is
+      # missing.
+    environment:
+      # The capability set, from the one anchor `medos-worker` also merges. See the block
+      # above `services:` for why this is not written out twice.
+      <<: [*capability-providers, *deid-provenance, *tenant-salt, *environment-kind]
+      # MOS-SEC-073: the application connects as `medicalos_app`, which owns no table and
+      # has rolbypassrls = false. This is NOT cosmetic -- `${MEDOS_PG_USER}` is the
+      # bootstrap superuser, and a superuser bypasses row-level security entirely, FORCE
+      # or no FORCE. Connecting as the bootstrap role would leave the policies of
+      # 0002_tenancy.up.sql present in the catalogue and inert in the running system.
+      MEDOS_DATABASE_URL: "postgresql://medicalos_app:${MEDOS_APP_PASSWORD:-medos_app}@postgres:5432/${MEDOS_PG_DB:-medos}"
+      # The tenant this single-tenant deployment serves. Bound per request by
+      # medos.api.app.TenantContextMiddleware and per unit of work by the runner. It is
+      # the tenant `0002_tenancy.up.sql` seeds and backfills, whose id is the frozen
+      # UID-derivation constant every existing 2.25.* UID was derived under.
+      MEDOS_TENANT_ID: "${MEDOS_TENANT_ID:-00000000-0000-0000-0000-000000000000}"
+      MEDOS_LOG_LEVEL: "${MEDOS_LOG_LEVEL:-INFO}"
+      # Set here too, for the same reason as on medos-worker below -- the API does not
+      # currently import the writer, and a PHI control that only covers the service that
+      # happens to trip it today is one refactor away from being wrong.
+      PYTHONWARNINGS: "ignore:The string :UserWarning"
+      # REGISTER ENTRY 82, CLOSED. The `@<path>` form is one
+      # `medos/medos/api/routes_training.py::load_training_environment` already reads, and it
+      # is the form used here on purpose: the nine keys are a DOCUMENT THIS FILE DOES NOT
+      # CONTAIN. `medos-trainer-environment` writes it from the trainer image's own build
+      # stamp and observed hardware, so `code_commit` and `image_digest` are correct
+      # after every rebuild with nobody editing anything. A JSON literal here would be
+      # exactly the stale record the entry is about.
+      MEDOS_TRAINING_ENVIRONMENT: "@/run/medos-training/training-environment.json"
+    # `--factory`: medos.api exposes create_app() and deliberately has no module-level
+    # `app` (MOS-REL-046 -- two create_app() calls with different DSNs share nothing).
+    # One worker process: the claim loop is in medos-worker, the API only reads and
+    # inserts, and a second uvicorn worker would double the connection count for no
+    # throughput this slice can measure.
+    command:
+      - uvicorn
+      - medos.api.app:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+      - --no-access-log   # medos.api.app's TraceContextMiddleware already logs one JSON
+                          # line per request WITH the trace id; uvicorn's access log would
+                          # print a second, trace-less, non-JSON copy of the same event.
+    ports:
+      - "127.0.0.1:${MEDOS_API_PORT:-8000}:8000"
+    volumes:
+      # Read-only: the API READS the declaration and must never be able to write one.
+      # `MOS-TRAIN-126` makes these facts "recorded rather than asserted", and a process
+      # that can rewrite the record is a process that can assert.
+      - training-environment:/run/medos-training:ro
+    networks: [medos]
+    healthcheck:
+      # /healthz, not /readyz: MOS-API-001 permits both, and medos.api.app documents the
+      # split -- liveness deliberately does NOT touch the database, "a probe that fails
+      # when Postgres is down asks the orchestrator to restart a process that is working".
+      # Compose's `condition: service_healthy` wants liveness here; readiness is what an
+      # operator curls.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          sys.exit(0 if urllib.request.urlopen("http://localhost:8000/healthz", timeout=3).status == 200 else 1)
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # -----------------------------------------------------------------------------------
+  # medos-worker: claim, execute the eight steps, complete. One replica.
+  #
+  # ONE replica is a statement, not a limitation. `SELECT ... FOR UPDATE SKIP LOCKED` plus
+  # the fencing token in `job_queue` makes N replicas correct (tests/integration/
+  # test_queue.py proves no double-claim under concurrency), so `deploy.replicas: 3` here
+  # would work. It is 1 because this stack runs on a laptop beside a 237-slice WADO
+  # retrieval and because nothing in the slice's acceptance checks measures throughput.
+  # -----------------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------------
+  # medos-train-api: the MODEL-PREPARATION service, and the second of the two products.
+  #
+  # `medos-api` above runs `medos.api.app:create_app` -- the PACS-and-models service. It
+  # serves 25 route paths and its import closure does not reach `medos.training`, which
+  # `tests/gate/test_core_train_boundary.py` asserts by walking the source rather than
+  # by taking anyone's word for it. A site that only SERVES models runs that and nothing
+  # else, and cannot prepare one even by accident.
+  #
+  # This runs `medos.api.training_plane:create_training_app`: the SAME application plus
+  # two routers -- harvesting, curation, dataset versions, splits, annotation sets,
+  # training runs, configuration searches, conversion runs. Chapter 10 table 10.2-B rows
+  # R6-R31. 52 route paths, a strict superset of Core's 25.
+  #
+  # SUPERSET, NOT FORK, and the gate asserts that too: the moment Core serves a path
+  # this does not, the two have begun to diverge and the cheap split has stopped being
+  # cheap.
+  #
+  # ITS OWN PORT rather than replacing `medos-api`, so both can run at once. A site that
+  # wants one process can run this one alone -- it answers everything `medos-api` does.
+  #
+  # Behind `profiles: [training]` with the trainer pair, so a default `up -d` brings up
+  # the PACS-and-models service and nothing that can prepare a model.
+  medos-train-api:
+    profiles: [training]
+    # A DIFFERENT IMAGE, not the same one with a different command. `medicalos/medos` is
+    # built from the Dockerfile's `core` target, which DELETES `medos/medos/training` and the
+    # two routers and then proves in the image that the app still builds without them.
+    # This service needs those files, so it is built from the `train` target, where they
+    # are present. 52 route paths against Core's 25.
+    image: medicalos/medos-train:0.1.0.dev0
+    build:
+      context: ../../..
+      dockerfile: medos/deploy/compose/Dockerfile
+      target: train
+    container_name: medos-train-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # REGISTER ENTRY 82'S EDGE WAS REMOVED, AND THE GUARANTEE IT BOUGHT IS INTACT.
+      # It used to wait on `medos-trainer-environment: service_completed_successfully`,
+      # so that the API was "either ready to train or absent, never up-and-lying".
+      #
+      # The cost of that was not visible until somebody ran this file on a laptop. The
+      # `&trainer-gpu` anchor reserves an nvidia device, so on a host with no NVIDIA
+      # container runtime the trainer-environment container cannot be CREATED -- and
+      # because this edge existed, medos-api never started, and because `ohif` waits on
+      # medos-api, the viewer never started either. A missing GPU took out the entire
+      # user-facing surface of a platform whose inference plane runs on CPU.
+      #
+      # WHY REMOVING IT IS SAFE RATHER THAN A TRADE. `TrainingEnvironment` is built PER
+      # REQUEST, not cached at import -- `medos/medos/api/routes_training.py` says so and gives
+      # the reason ("an environment cached at import is one an operator cannot correct
+      # without a restart"). So an API that starts before the declaration exists answers
+      # `503 TRAINING_ENVIRONMENT_NOT_RECORDED` until it does, and then simply stops. The
+      # refusal entry 82 relied on is the same refusal; what has gone is the wait.
+      #
+      # "Up and answering 503 on the training routes" is strictly better than "absent",
+      # and it is not up-and-lying: the 503 names exactly which of the nine keys is
+      # missing.
+    environment:
+      # The capability set, from the one anchor `medos-worker` also merges. See the block
+      # above `services:` for why this is not written out twice.
+      <<: [*capability-providers, *deid-provenance, *tenant-salt, *environment-kind]
+      # MOS-SEC-073: the application connects as `medicalos_app`, which owns no table and
+      # has rolbypassrls = false. This is NOT cosmetic -- `${MEDOS_PG_USER}` is the
+      # bootstrap superuser, and a superuser bypasses row-level security entirely, FORCE
+      # or no FORCE. Connecting as the bootstrap role would leave the policies of
+      # 0002_tenancy.up.sql present in the catalogue and inert in the running system.
+      MEDOS_DATABASE_URL: "postgresql://medicalos_app:${MEDOS_APP_PASSWORD:-medos_app}@postgres:5432/${MEDOS_PG_DB:-medos}"
+      # The tenant this single-tenant deployment serves. Bound per request by
+      # medos.api.app.TenantContextMiddleware and per unit of work by the runner. It is
+      # the tenant `0002_tenancy.up.sql` seeds and backfills, whose id is the frozen
+      # UID-derivation constant every existing 2.25.* UID was derived under.
+      MEDOS_TENANT_ID: "${MEDOS_TENANT_ID:-00000000-0000-0000-0000-000000000000}"
+      MEDOS_LOG_LEVEL: "${MEDOS_LOG_LEVEL:-INFO}"
+      # Set here too, for the same reason as on medos-worker below -- the API does not
+      # currently import the writer, and a PHI control that only covers the service that
+      # happens to trip it today is one refactor away from being wrong.
+      PYTHONWARNINGS: "ignore:The string :UserWarning"
+      # REGISTER ENTRY 82, CLOSED. The `@<path>` form is one
+      # `medos/medos/api/routes_training.py::load_training_environment` already reads, and it
+      # is the form used here on purpose: the nine keys are a DOCUMENT THIS FILE DOES NOT
+      # CONTAIN. `medos-trainer-environment` writes it from the trainer image's own build
+      # stamp and observed hardware, so `code_commit` and `image_digest` are correct
+      # after every rebuild with nobody editing anything. A JSON literal here would be
+      # exactly the stale record the entry is about.
+      MEDOS_TRAINING_ENVIRONMENT: "@/run/medos-training/training-environment.json"
+    # `--factory`: medos.api exposes create_app() and deliberately has no module-level
+    # `app` (MOS-REL-046 -- two create_app() calls with different DSNs share nothing).
+    # One worker process: the claim loop is in medos-worker, the API only reads and
+    # inserts, and a second uvicorn worker would double the connection count for no
+    # throughput this slice can measure.
+    command:
+      - uvicorn
+      - medos.api.training_plane:create_training_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+      - --no-access-log   # medos.api.app's TraceContextMiddleware already logs one JSON
+                          # line per request WITH the trace id; uvicorn's access log would
+                          # print a second, trace-less, non-JSON copy of the same event.
+    ports:
+      - "127.0.0.1:${MEDOS_TRAIN_API_PORT:-8001}:8000"
+    volumes:
+      # Read-only: the API READS the declaration and must never be able to write one.
+      # `MOS-TRAIN-126` makes these facts "recorded rather than asserted", and a process
+      # that can rewrite the record is a process that can assert.
+      - training-environment:/run/medos-training:ro
+    networks: [medos]
+    healthcheck:
+      # /healthz, not /readyz: MOS-API-001 permits both, and medos.api.app documents the
+      # split -- liveness deliberately does NOT touch the database, "a probe that fails
+      # when Postgres is down asks the orchestrator to restart a process that is working".
+      # Compose's `condition: service_healthy` wants liveness here; readiness is what an
+      # operator curls.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          sys.exit(0 if urllib.request.urlopen("http://localhost:8000/healthz", timeout=3).status == 200 else 1)
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # -----------------------------------------------------------------------------------
+  # medos-worker: claim, execute the eight steps, complete. One replica.
+  #
+  # ONE replica is a statement, not a limitation. `SELECT ... FOR UPDATE SKIP LOCKED` plus
+  # the fencing token in `job_queue` makes N replicas correct (tests/integration/
+  # test_queue.py proves no double-claim under concurrency), so `deploy.replicas: 3` here
+  # would work. It is 1 because this stack runs on a laptop beside a 237-slice WADO
+  # retrieval and because nothing in the slice's acceptance checks measures throughput.
+  # -----------------------------------------------------------------------------------
+  medos-worker:
+    image: medicalos/medos:0.1.0.dev0
+    build:
+      context: ../../..
+      dockerfile: medos/deploy/compose/Dockerfile
+    container_name: medos-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # NOT `orthanc` -- the worker has no route to it any more (MOS-DATA-006). What it
+      # waits for is the Gateway, which waits for Orthanc.
+      medos-gateway:
+        condition: service_healthy
+    environment:
+      # The capability set, from the one anchor `medos-api` also merges. Identical by
+      # construction: the API cannot admit a capability id this worker will not run.
+      <<: [*capability-providers, *deid-provenance, *tenant-salt, *environment-kind]
+      MEDOS_DATABASE_URL: "postgresql://medicalos_app:${MEDOS_APP_PASSWORD:-medos_app}@postgres:5432/${MEDOS_PG_DB:-medos}"
+      # MOS-SEC-078: the worker holds no cross-tenant connection. It iterates this set,
+      # binding one tenant per claim; an expired lease in a tenant it does not serve is
+      # invisible to it, which is the intended consequence of forced row security on
+      # `job_queue`. Comma-separated; defaults to MEDOS_TENANT_ID.
+      MEDOS_TENANT_ID: "${MEDOS_TENANT_ID:-00000000-0000-0000-0000-000000000000}"
+      MEDOS_TENANTS: "${MEDOS_TENANTS:-00000000-0000-0000-0000-000000000000}"
+      # RE-POINTED AT THE GATEWAY. 15.2.4 item 3, and the reason it is scheduled in this
+      # block rather than later: "retrofitting a proxy under a working viewer and three
+      # workers means re-pointing all of them".
+      #
+      # This used to be `http://orthanc:8042/dicom-web`. It is now a Gateway URL with a
+      # tenant segment (MOS-DATA-007), and `orthanc` is no longer resolvable from this
+      # container at all -- it left the `medos` network (MOS-DATA-006), so a revert of this
+      # line fails loudly instead of quietly restoring direct PACS access.
+      MEDOS_DICOMWEB_URL: "http://medos-gateway:8043/dicomweb/${MEDOS_TENANT_ID:-00000000-0000-0000-0000-000000000000}"
+      # MOS-DATA-017: "A `Service` container MUST receive a scoped Gateway TOKEN, never a
+      # credential." This is a token for the Gateway, not a credential for the PACS -- the
+      # distinction MOS-DATA-002 turns on. `medos.dicomweb.gateway.GatewayConfig` reads it
+      # as a bearer token and sends it as `Authorization: Bearer`.
+      # DEVIATION, stated: MOS-DATA-018/019 want a per-job JWT whose lifetime is
+      # min(job_deadline_at, iat+1800s) and whose job_id the Gateway re-checks. This is a
+      # long-lived key. See medos/medos/gateway/auth.py StaticApiKeyAuthenticator.
+      MEDOS_DICOMWEB_TOKEN: "${MEDOS_GATEWAY_WORKER_KEY:-medos-dev-worker-key}"
+      MEDOS_DICOMWEB_TIMEOUT_S: "${MEDOS_DICOMWEB_TIMEOUT_S:-300}"
+      # Weeks 3-5, 15.2.4: native-mode inference runs on the shared Triton. Setting this
+      # is what makes medos.inference.dispatch.build_backend() return a TritonBackend; it
+      # CANNOT return the in-process fixture, which is not a shipped driver (15.2.9).
+      # The three capabilities this stack runs are deterministic and never call it, so a
+      # worker started without this variable behaves exactly as it did in weeks 1-2 --
+      # and a native-mode capability scheduled on such a worker raises rather than
+      # silently falling back to an in-process implementation.
+      # DEFAULTS TO EMPTY NOW THAT TRITON IS BEHIND `--profile inference`. Pointing a
+      # worker at `http://triton:8000` when no such service was started does not give
+      # a worker without inference; it gives a worker that builds a TritonBackend and
+      # discovers the truth one connection error at a time, per job. Unset is the
+      # honest default: `build_backend()` returns None, and `run_capability` raises
+      # `NativeBackendMissing` the moment a capability actually needs it.
+      #
+      # `-` and not `:-`, so `MEDOS_TRITON_URL=` explicitly set to empty still means
+      # absent rather than being silently replaced by a default.
+      MEDOS_TRITON_URL: "${MEDOS_TRITON_URL-}"
+      # Read by a worker that needs a residency reservation before claiming
+      # (MOS-OPS-081). No capability in this stack needs one yet; the address is here so
+      # that the first one that does is a configuration change and not a code change.
+      MEDICALOS_TRITOND_URL: "${MEDICALOS_TRITOND_URL:-http://medos-tritond:8500}"
+      MEDOS_WORK_ROOT: /var/lib/medos/work
+      MEDOS_LOG_LEVEL: "${MEDOS_LOG_LEVEL:-INFO}"
+      # A PHI CONTROL, not log tidying. CONTRACT.md section 11: "Never log a PHI value --
+      # log UIDs only, never names or MRNs." `medos/medos/` obeys that; highdicom does not know
+      # the rule. When the writer inherits a source PatientName that is a single component
+      # (which every de-identified pseudonym and many real names are), highdicom emits
+      #     UserWarning: The string "<PatientName>" is unlikely to represent the intended
+      #     person name ...
+      # on stderr -- quoting the patient attribute verbatim into the container log, where
+      # it is then shipped wherever logs are shipped. Measured on this stack with LCTSC
+      # data; a real PatientName would appear the same way.
+      #
+      # The filter is matched on the MESSAGE PREFIX, not on the category and not on a
+      # module, so it suppresses exactly this one warning text: any other highdicom
+      # UserWarning (transfer syntax, geometry, a segment it could not encode) still
+      # reaches the log. Verified with a second UserWarning that still printed.
+      #
+      # This is a containment, NOT the fix. The defect is that `medos/medos/writer` hands a raw
+      # inherited PatientName to highdicom at all; that belongs to `medos/medos/writer/identity.py`
+      # (see `normalise_pn`) and is reported rather than silently patched here.
+      PYTHONWARNINGS: "ignore:The string :UserWarning"
+    command:
+      - python
+      - -m
+      - medos.worker.runner
+      - --dicomweb-url
+      - http://medos-gateway:8043/dicomweb/${MEDOS_TENANT_ID:-00000000-0000-0000-0000-000000000000}
+      - --work-root
+      - /var/lib/medos/work
+      # MOS-EXEC-029: LeaseDuration >= 4 * heartbeat interval, enforced in
+      # RunnerConfig.__post_init__. 600s because one attempt WADOs a 237-slice series and
+      # writes two DICOM objects; a 120s lease would be reclaimed mid-inference on a cold
+      # cache and the job would restart forever without ever being wrong.
+      - --lease-seconds
+      - "600"
+      - --heartbeat-seconds
+      - "30"
+      - --poll-interval
+      - "1.0"
+    volumes:
+      # Named volume, not tmpfs: a 237-slice CT is ~130 MB of scratch and a tmpfs that size
+      # comes out of RAM. Contents are transient -- the runner cleans each job's directory
+      # unless keep_work_dir is set.
+      - worker-work:/var/lib/medos/work
+    # `sealed` as well as `medos`, because this container is the SEALED-SERVICE INVOKER of
+    # chapter 2 section 2.6.2 step 2 -- the Z-PLATFORM side that calls `POST /v1/executions`
+    # and pulls the artifacts back. It is also MOS-SEC-029's "platform callback address".
+    #
+    # Being on both networks is NOT a bridge between them: docker's bridge driver does not
+    # route between networks, so a container on `sealed` can reach this one and still
+    # cannot reach Postgres through it. That is an empirical claim rather than a design
+    # intention, so tests/integration/test_sealed_mode.py opens the connection and checks.
+    networks: [medos, sealed]
+    healthcheck:
+      # The runner has no HTTP surface, so "healthy" is answered the only honest way: the
+      # process can still import its own entry point and open its own database. It does NOT
+      # claim the claim loop is making progress -- an empty queue looks identical to a
+      # wedged worker from outside, and `job_queue.claimed_at` is where that is actually
+      # visible.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys
+          from medos.db.conn import connect
+          from medos.worker.runner import WorkerRunner  # import-time proof
+          c = connect()
+          c.execute("SELECT 1")
+          c.close()
+          sys.exit(0)
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # -----------------------------------------------------------------------------------
+  # web: the one origin the browser talks to.
+  #
+  # NAMED FOR WHAT IT IS, NOW THAT IT IS NOT A VIEWER. This service was `ohif` and ran
+  # `ohif/app:v3.9.2` -- nginx:alpine with the OHIF single-page app baked into the html
+  # root. OHIF is withdrawn, so the image is a plain pinned nginx and the SPA is gone; the
+  # FOUR OTHER THINGS this container has always done are untouched, because none of them
+  # was ever OHIF's: the first-party viewer at /mos-viewer/, the training console, the
+  # MedicalOS extension package at /medicalos/, and the proxying of /api/ and /dicomweb/.
+  #
+  # NOT `medos-viewer`. Calling the front door a viewer invites the next reader to look
+  # elsewhere for /api/ and /dicomweb/, which are here and belong here: one origin for the
+  # browser is what removes CORS from the picture entirely and is the shape MOS-OPS-005
+  # mandates. See nginx.conf.template.
+  #
+  # THE WITHDRAWAL DOES NOT DESTROY THE FALLBACK. `ohif/app:v3.9.2` is a pinned tag and
+  # stays in this file's history, so the incumbent can be raised again for the one-off
+  # rendering comparison `MOS-IMG-157a` requires. What is withdrawn is the deployment, not
+  # the possibility.
+  #
+  # AND THAT IS NOT THE ADR'S CONDITION, which an earlier version of this comment said it
+  # was. `docs/adr/BUILD_VS_ADOPT.md` conditions retiring the incumbent on the first-party
+  # viewer HAVING rendering-correctness evidence, not on the old image staying raisable.
+  # The evidence does not exist -- register entry 106 restates it as owed at 0.4.0 -- so
+  # the incumbent was retired with that condition unmet. A pinned tag preserves the ability
+  # to discharge the requirement; it is not the evidence the ADR asked for, and a comment
+  # in a deployment file is not where that difference gets settled. Chapter 4 says so in
+  # as many words, naming this comment.
+  # -----------------------------------------------------------------------------------
+  web:
+    image: nginx:1.27-alpine
+    container_name: medos-web
+    restart: unless-stopped
+    depends_on:
+      # MOS-DATA-015, amended at specification 0.4.0 -- its subject is the clinician
+      # surface, not the product that used to be one: that surface MUST be configured
+      # against the Gateway and MUST NOT be configured against the PACS. The viewer has no
+      # route to `orthanc` any more.
+      medos-gateway:
+        condition: service_healthy
+      medos-api:
+        condition: service_healthy
+    environment:
+      # Injected into the nginx template as `Authorization: Bearer` on /dicomweb/.
+      # The browser never sees it: tests/e2e/test_demo.py greps every file served to the
+      # browser for `authorization`, `bearer` and `btoa(`, and this one lives in nginx.
+      # It is a GATEWAY token, not a PACS credential -- MOS-DATA-002 restricts the latter.
+      MEDOS_GATEWAY_VIEWER_KEY: "${MEDOS_GATEWAY_VIEWER_KEY:-medos-dev-viewer-key}"
+      # The viewer's PLATFORM credential for /api/ -- `Bearer <api key>` for a principal
+      # holding `job.create`, injected by nginx only when the browser sent no Authorization
+      # header of its own. See the `map` at the top of nginx.conf.template.
+      #
+      # DELIBERATELY NO DEFAULT. A compose default would be a credential hardcoded in a
+      # tracked file, and the API keys of chapter 8 are minted per deployment
+      # (`python -m medos.security.cli issue --scope job.create --scope job.read`). Unset,
+      # the OHIF toolbar button gets a 401 and the panel renders the RFC 9457 document --
+      # honest, and exactly what MOS-SAFE-089a's "MUST require the job.create permission"
+      # looks like from the browser when nobody has been granted it.
+      MEDOS_API_VIEWER_AUTHORIZATION: "${MEDOS_API_VIEWER_AUTHORIZATION:-}"
+    volumes:
+      # The MedicalOS extension's deployment configuration, at the path OHIF used to read
+      # its own from. See the header of medicalos-config.js for why the legacy path stays.
+      - ./medicalos-config.js:/usr/share/nginx/html/app-config.js:ro
+      # NOT /etc/nginx/conf.d/default.conf -- the entrypoint regenerates that from the
+      # template on every boot. See the header of nginx.conf.template.
+      - ./nginx.conf.template:/usr/src/default.conf.template:ro
+      # The MedicalOS extension. CONTRACT.md section 1 puts it under medos/web/ohif-extension/.
+      # The WHOLE package is mounted, not just standalone/, because standalone/app.js
+      # imports ../src/core/*.js -- the same modules the React extension imports. One
+      # implementation, two hosts; mounting only standalone/ would break those imports and
+      # force a duplicate copy of the client, which is the drift the shared core prevents.
+      # Served read-only, and it contains no secret: see medicalos-config.js.
+      - ../../../medos/web/ohif-extension:/usr/share/nginx/html/medicalos:ro
+      # The FIRST-PARTY VIEWER, release 0.4.0. MOS-CORE-038 ("MUST NOT build its own
+      # DICOM viewer") is reversed for 0.4.0 under MOS-CORE-036; the engineering half of
+      # that decision is the Viewer row of docs/adr/BUILD_VS_ADOPT.md, which names the
+      # disqualifying property (the delivered OHIF surface could not be bounded to that
+      # requirement without a fork, which MOS-UI-009 forbade) and records the
+      # counter-argument (the rendering-correctness evidence burden transfers here).
+      #
+      # THE TENSION THIS COMMENT USED TO RECORD IS RESOLVED, and the history is kept because
+      # the resolution is the interesting part. Two earlier versions stood here. The first
+      # justified mounting beside OHIF by citing MOS-IMG-158's second-viewer gate, which was
+      # backwards -- MOS-UI-202's OHIF row says that gate is "designed to detect, not to
+      # institutionalise" two renderings of the same SEG. The second admitted the mount was
+      # "in tension with MOS-UI-205 until that requirement is amended too", MOS-UI-205 being
+      # "a second viewer MUST NOT be deployed alongside the first".
+      #
+      # There is no second viewer now, and MOS-UI-205 is WITHDRAWN at specification 0.4.0,
+      # replaced by MOS-UI-205a. MOS-UI-009 went at 0.3.0, replaced by MOS-UI-009a. So this
+      # mount needs no exception: it is the only clinician surface the stack serves. What is
+      # NOT resolved is the condition the ADR attached -- see the note on the image above.
+      #
+      # It holds NO credential. /dicomweb/ is proxied by the nginx below, which injects
+      # MEDOS_GATEWAY_VIEWER_KEY server-side; tests/e2e/test_demo.py greps every served
+      # file for `bearer` to keep it that way (MOS-UI-002).
+      # SERVED AT /mos-viewer/ AND NOT /viewer/, for a reason that has since expired. The
+      # obvious path collided with OHIF's OWN client route: OHIF was a single-page app whose
+      # router owned /viewer?StudyInstanceUIDs=..., reached through nginx's SPA fallback to
+      # index.html, and mounting a real directory at /viewer made nginx answer 301 to
+      # /viewer/ and serve this page instead -- killing every OHIF deep link silently, and
+      # killing it in the incumbent that was being kept as the rendering-correctness
+      # fallback for exactly this viewer. Verified by curl at the time: 301 before the
+      # rename, OHIF's SPA after. OHIF and the fallback both went at 0.4.0, so /viewer/ is
+      # free now; the path stays because six specification chapters, the release criteria
+      # and this service's own healthcheck name it.
+      - ../../../viewer:/usr/share/nginx/html/mos-viewer:ro
+      # AND THE FOUR LINES THAT MAKE IT THIS PLATFORM'S CLINICIAN SURFACE.
+      #
+      # Mounted OVER the viewer's own tree rather than living in it, which is the whole
+      # point: `viewer/` is a DICOMweb viewer and knows nothing about tenants or
+      # consumer classes. Without this file it opens any conformant origin at `/dicomweb`
+      # and sends no surface header; with it, it is the MedicalOS clinician viewer.
+      # See the file's own header for what each field buys.
+      - ./viewer-config.js:/usr/share/nginx/html/mos-viewer/viewer-config.js:ro
+      # Renders nginx.conf.template with the viewer's Gateway token, then execs nginx.
+      # NOTHING ELSE RENDERS IT: `nginx:1.27-alpine` templates /etc/nginx/templates and
+      # this one is mounted at /usr/src. Drop the `command:` below and the container comes
+      # up on the image's stock default.conf, which serves /mos-viewer/ from the same
+      # document root with no `no-store`, no `.mjs` type and no /api/ proxy -- a viewer
+      # that loads and does not work. See the script's header.
+      - ./web-entrypoint.sh:/usr/local/bin/web-entrypoint.sh:ro
+    command: ["sh", "/usr/local/bin/web-entrypoint.sh"]
+    ports:
+      - "127.0.0.1:${MEDOS_WEB_PORT:-3000}:80"
+    networks: [medos]
+    healthcheck:
+      # busybox wget is present on the alpine image; curl is not. PROBING THE VIEWER'S OWN
+      # index, not `/`: `/` is a 302 signpost and a redirect proves only that nginx parsed
+      # its config. This proves the bind mount landed and the clinical surface is being
+      # served, which is the only reason this container exists.
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/mos-viewer/index.html"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  # -----------------------------------------------------------------------------------
+  # minio: the model ARTIFACT store. Weeks 3-5, 15.2.4.
+  #
+  # MOS-SVC-058: "Neither mode may bake model weights into a runner image (native) nor
+  # mutate them at runtime (both)." So the model repository volume Triton reads starts
+  # EMPTY on every fresh stack and is filled by medos-tritond from this bucket.
+  #
+  # Tag: quay.io/minio rather than Docker Hub, pinned to an exact RELEASE stamp. `latest`
+  # is banned here for the same reason it is banned for every other image in this file.
+  # -----------------------------------------------------------------------------------
+  minio:
+    # PROFILE `inference`, declared on four services. They are 8.11 GB of a ~9.4 GB
+    # stack -- roughly six times everything else combined -- and NOTHING OUTSIDE THEM
+    # DEPENDS ON THEM: `minio` <- `medos-model-publish` <- `medos-tritond` -> `triton`
+    # is a closed subgraph, and `medos-worker` reaches Triton by environment variable
+    # only, with no depends_on edge.
+    #
+    # THE REFUSAL FOR THE ABSENT CASE WAS WRITTEN BEFORE THIS PROFILE EXISTED, which is
+    # why the cut is safe: `medos/medos/inference/dispatch.py` returns None from
+    # `build_backend()` when MEDOS_TRITON_URL is unset, lazily, and `run_capability`
+    # raises `NativeBackendMissing` if a capability turns out to need it after all. A
+    # deployment without an inference plane fails loudly at the one point it matters
+    # rather than quietly everywhere.
+    #
+    # THIS IS NOT A GPU PROFILE, and saying so matters because DEVELOPMENT.md named
+    # Triton as the GPU-less laptop's problem and was wrong. Triton carries no device
+    # reservation at all and `medos/medos/inference/repository.py` writes KIND_CPU instance
+    # groups. This is a DOWNLOAD cut. The GPU reservation is on the trainer pair.
+    profiles: [inference]
+    image: quay.io/minio/minio:RELEASE.2024-09-13T20-26-02Z
+    container_name: medos-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      # Development credentials, on a port bound to 127.0.0.1, holding three 269-byte
+      # ONNX files and no PHI. A real deployment sets these from a secret store; they are
+      # read by medos.objectstore.S3Config, which never logs the secret and never puts it
+      # in a URL.
+      MINIO_ROOT_USER: "${MEDOS_OBJECT_STORE_ACCESS_KEY:-medosminio}"
+      MINIO_ROOT_PASSWORD: "${MEDOS_OBJECT_STORE_SECRET_KEY:-medosminio123}"
+      MINIO_UPDATE: "off"
+    volumes:
+      - minio-data:/data
+    ports:
+      - "127.0.0.1:${MEDOS_MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${MEDOS_MINIO_CONSOLE_PORT:-9001}:9001"
+    networks: [medos]
+    healthcheck:
+      # `mc ready local` is MinIO's own readiness verb and is present in the image; it
+      # proves the object layer is initialised, which /minio/health/live does not.
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 5s
+
+  # -----------------------------------------------------------------------------------
+  # medos-model-publish: a one-shot. Uploads medos/deploy/models/ into the bucket and exits 0.
+  #
+  # `restart: "no"` and `service_completed_successfully` downstream: this is a job, not a
+  # service, and tritond must not start against a half-published artifact.
+  #
+  # The artifacts are BIND-MOUNTED rather than baked into medicalos/medos:0.1.0.dev0 --
+  # that is MOS-SVC-058 applied to this container too. medos/tools/publish_model.py is in the
+  # image because it is code; the weights are on the host because they are weights.
+  # -----------------------------------------------------------------------------------
+  medos-model-publish:
+    profiles: [inference]
+    image: medicalos/medos:0.1.0.dev0
+    build:
+      context: ../../..
+      dockerfile: medos/deploy/compose/Dockerfile
+    container_name: medos-model-publish
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MEDOS_OBJECT_STORE_ENDPOINT: "http://minio:9000"
+      MEDOS_OBJECT_STORE_ACCESS_KEY: "${MEDOS_OBJECT_STORE_ACCESS_KEY:-medosminio}"
+      MEDOS_OBJECT_STORE_SECRET_KEY: "${MEDOS_OBJECT_STORE_SECRET_KEY:-medosminio123}"
+      MEDOS_OBJECT_STORE_BUCKET: "${MEDOS_OBJECT_STORE_BUCKET:-medos-models}"
+    volumes:
+      - ../models:/srv/models:ro
+    command: ["python", "/app/tools/publish_model.py", "publish", "--src", "/srv/models"]
+    networks: [medos]
+
+  # -----------------------------------------------------------------------------------
+  # medos-seed-corpus: one synthetic CT study, so a first run shows something.
+  #
+  # PROFILE `demo`, and a one-shot: `restart: "no"`, it exits when the study is in the
+  # archive. Behind a profile because seeding is a choice -- a service that fabricates
+  # studies has no business starting because somebody typed `up -d`.
+  #
+  # TWO INDEPENDENT GUARDS, because one of them is a compose file that gets copied:
+  #   1. this profile, which an operator opts into;
+  #   2. the tool's own refusal unless MEDOS_ENV is exactly `dev`, which is the one that
+  #      survives somebody copying this file and editing the database URL.
+  # The second is the real guard. The first is convenience.
+  #
+  # IDEMPOTENT. Every UID is derived from a fixed namespace, so a second `up --profile
+  # demo` posts the same SOPInstanceUIDs, finds them present and exits without storing.
+  # An archive that grows by one study every time you restart the stack is worse than an
+  # empty one, because the second study looks like a real second patient.
+  #
+  # THROUGH THE GATEWAY, not into Orthanc. MOS-DATA-006 makes the gateway the only
+  # component permitted to hold a PACS credential, and a seeder that reached around it
+  # would be the first exception -- on the least important path in the system, which is
+  # exactly where exceptions get made.
+  medos-seed-corpus:
+    profiles: [demo]
+    image: medicalos/medos:0.1.0.dev0
+    build:
+      context: ../../..
+      dockerfile: medos/deploy/compose/Dockerfile
+    container_name: medos-seed-corpus
+    restart: "no"
+    depends_on:
+      medos-gateway:
+        condition: service_healthy
+    environment:
+      <<: *environment-kind
+      MEDOS_GATEWAY_BASE: "http://medos-gateway:8043"
+      # The tenant UUID, not a name: MOS-DATA-009 compares this against the principal's
+      # tenant and answers 403 TENANT_MISMATCH on a friendly string.
+      MEDOS_TENANT_ID: "${MEDOS_TENANT_ID:-00000000-0000-0000-0000-000000000000}"
+      # svc:medos-worker in gateway-principals.json: study.read + study.write.
+      MEDOS_DICOMWEB_TOKEN: "${MEDOS_GATEWAY_WORKER_KEY:-medos-dev-worker-key}"
+    command: ["python", "/app/tools/demo/seed_corpus.py"]
+    networks: [medos]
+
+  # -----------------------------------------------------------------------------------
+  # triton: the single shared inference server of 15.2.4 and chapter 13 13.10.
+  #
+  # FLAGS -- MOS-OPS-074, verbatim, and every one of them load-bearing:
+  #   --model-control-mode=explicit   nothing becomes resident without passing through
+  #                                   tritond, which is what makes the 13.10.3 budget
+  #                                   mean anything. Poll mode would load every directory
+  #                                   it finds and residency accounting would be void.
+  #   --strict-readiness=true         /v2/health/ready means "every loaded model is
+  #                                   ready", not "the process is up".
+  #   --exit-on-error=true            a model that fails to load kills the server rather
+  #                                   than leaving a half-configured one serving.
+  #
+  # MOS-OPS-074's FOURTH FLAG, AND A DEVIATION THAT IS REPORTED RATHER THAN HIDDEN:
+  #   The rule says `--response-cache-byte-size=0`. On tritonserver 24.05 that flag is
+  #   deprecated and PASSING IT WITH 0 IS FATAL -- the server tries to construct a
+  #   zero-byte LocalCache and exits:
+  #       error: creating server: Internal - Failed to initialize LocalCache:
+  #       Could not initialize buffer in basic_managed_external_buffer constructor
+  #   Measured on this host, 2026-09-14. Omitting the flag is how a modern Triton is told
+  #   the response cache is off, and the server's own startup table then reports
+  #   `cache_enabled 0`. The REQUIREMENT ("the response cache is forbidden outright") is
+  #   met; the literal flag text is not, because the literal flag text cannot be met on
+  #   this version. medos/medos/inference/triton.py:assert_server_flags reports which of the
+  #   four flags it actually observes and which are declared here only.
+  #
+  # /models is READ-ONLY here and read-write in medos-tritond. Triton is the reader; the
+  # platform is the administrator (13.10). The volume starts empty on `down -v`, which is
+  # the observable form of MOS-SVC-058.
+  #
+  # TAG: NVIDIA's release tags are exact (24.05 is a dated release, not a moving major).
+  # Image digest on this host:
+  #   sha256:957411492fd36f2d47fac1c9fd0840eedf2352e441a89859265b85908d978e08
+  # -----------------------------------------------------------------------------------
+  triton:
+    profiles: [inference]
+    image: nvcr.io/nvidia/tritonserver:24.05-py3
+    container_name: medos-triton
+    restart: unless-stopped
+    command:
+      - tritonserver
+      - --model-repository=/models
+      - --model-control-mode=explicit
+      - --strict-readiness=true
+      - --exit-on-error=true
+      # --response-cache-byte-size is deliberately ABSENT. See the block comment above.
+      - --allow-grpc=false
+      - --log-verbose=0
+    volumes:
+      - model-repo:/models:ro
+    ports:
+      # 8000 is Triton's HTTP port and is already taken on the host by medos-api, so the
+      # host mapping moves and the in-network address does not. Published only so the
+      # host-side tests/integration/test_triton.py can reach it; bound to 127.0.0.1.
+      - "127.0.0.1:${MEDOS_TRITON_PORT:-8010}:8000"
+      - "127.0.0.1:${MEDOS_TRITON_METRICS_PORT:-8012}:8002"
+    networks: [medos]
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - -o
+        - /dev/null
+        - http://localhost:8000/v2/health/ready
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # -----------------------------------------------------------------------------------
+  # medos-tritond: chapter 13 13.10's administrator. The only holder of Triton's
+  # model-control credential -- structurally, not by convention: this is the only process
+  # that constructs a medos.inference.triton.TritonAdminClient, and the class the worker
+  # gets (TritonBackend) has no load/unload method at all.
+  #
+  # MEDICALOS_MODEL_PINS is resolution by id AND version, with no "latest" and no default.
+  # Two versions of one model are pinned so that both are resident simultaneously under
+  # the distinct names MOS-OPS-068 derives -- which is what makes 15.2.9's "the registry
+  # contract is genuinely exercised instead of asserted" a thing a test can fail.
+  #
+  # SECURITY POSTURE: MOS-OPS-113 requires /internal/v1/... to be mesh-internal, absent
+  # from the OpenAPI document (it is -- include_in_schema=False), and authenticated by
+  # workload identity. There is no workload identity in this compose stack, so the control
+  # is network placement plus a 127.0.0.1 binding, and that is a stated shortcut with the
+  # same closing date as the PACS one above, not a claim that the control exists.
+  # -----------------------------------------------------------------------------------
+  medos-tritond:
+    profiles: [inference]
+    image: medicalos/medos:0.1.0.dev0
+    build:
+      context: ../../..
+      dockerfile: medos/deploy/compose/Dockerfile
+    container_name: medos-tritond
+    restart: unless-stopped
+    depends_on:
+      triton:
+        condition: service_healthy
+      medos-model-publish:
+        condition: service_completed_successfully
+    environment:
+      MEDOS_TRITON_URL: "http://triton:8000"
+      MEDICALOS_HTTP_ADDR: "0.0.0.0:8500"
+      MEDICALOS_MODEL_REPOSITORY: /models
+      MEDICALOS_NODE_ID: "${MEDICALOS_NODE_ID:-compose-node-01}"
+      MEDOS_OBJECT_STORE_ENDPOINT: "http://minio:9000"
+      MEDOS_OBJECT_STORE_ACCESS_KEY: "${MEDOS_OBJECT_STORE_ACCESS_KEY:-medosminio}"
+      MEDOS_OBJECT_STORE_SECRET_KEY: "${MEDOS_OBJECT_STORE_SECRET_KEY:-medosminio123}"
+      MEDOS_OBJECT_STORE_BUCKET: "${MEDOS_OBJECT_STORE_BUCKET:-medos-models}"
+      # MOS-OPS-087 default 300 s; short here because nothing on this stack has a p95 job
+      # duration anywhere near it and a 5-minute hold window makes the eviction rotation
+      # untestable in a 60-second integration test. The clamp rule is implemented in
+      # medos/medos/inference/residency.py; this value is a laptop setting, not a site setting.
+      MEDICALOS_RESIDENCY_MIN_HOLD_SECONDS: "${MEDICALOS_RESIDENCY_MIN_HOLD_SECONDS:-10}"
+      MEDICALOS_RESIDENCY_TICK_SECONDS: "2"
+      MEDICALOS_GPU_HEADROOM_RATIO: "0.90"
+      MEDICALOS_MODEL_PINS: >-
+        [{"model_id":"medos.selftest-affine","model_version":"1.0.0",
+          "residency":"resident","patch_batch_size":2,
+          "service_ids":["svc_platform_selftest"]},
+         {"model_id":"medos.selftest-affine","model_version":"1.1.0",
+          "residency":"on_demand","patch_batch_size":2,
+          "service_ids":["svc_platform_selftest_next"]}]
+      MEDOS_LOG_LEVEL: "${MEDOS_LOG_LEVEL:-INFO}"
+    volumes:
+      # READ-WRITE here, read-only on triton. tritond writes the model repository; Triton
+      # reads it. 13.10.1's directory layout is produced by
+      # medos.inference.repository.write_model_directory.
+      - model-repo:/models
+    command: ["python", "-m", "medos.inference.tritond", "serve"]
+    ports:
+      - "127.0.0.1:${MEDOS_TRITOND_PORT:-8500}:8500"
+    networks: [medos]
+    healthcheck:
+      # /healthz, not /readyz -- same split medos-api documents. Liveness must not fail
+      # because Triton is restarting; that would ask the orchestrator to restart a process
+      # that is working.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          sys.exit(0 if urllib.request.urlopen("http://localhost:8500/healthz", timeout=3).status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  # -----------------------------------------------------------------------------------
+  # medos-sealed-service: a THIRD PARTY's container, and the whole point is what it cannot
+  # reach. Chapter 2 section 2.5 -- sealed mode, first supported release 0.3.0
+  # (MOS-SVC-118).
+  #
+  # Its image is built from medos/deploy/compose/Dockerfile.sealed and shares nothing with
+  # medicalos/medos: the vendor brings its own runtime, its own weights, and no part of
+  # the platform. `medos/medos/sealed/isolation.py` states the destinations this container must
+  # not be able to open a TCP connection to, and
+  # `tests/integration/test_sealed_mode.py` opens them from inside this container.
+  #
+  # FOUR THINGS ARE ABSENT FROM THIS SERVICE ON PURPOSE. Each is a requirement, not an
+  # omission:
+  #   no `ports:`   -- the host is Z-EDGE and the zone table (8.1.1) grants Z-SERVICE
+  #                    ingress from Z-PLATFORM only. A published port is an ingress from
+  #                    every browser on the machine.
+  #   no `networks: [medos]` -- membership of `sealed` ALONE is what makes Postgres, MinIO,
+  #                    Triton, the PACS and the broker-when-it-lands unroutable
+  #                    (MOS-SEC-004: enforced by per-service networks, "not only by
+  #                    configuration of the client").
+  #   no credential env -- MOS-SEC-087 ("no object-store credentials of any kind, in
+  #                    either execution mode"), MOS-SEC-005 (no PACS credential),
+  #                    MOS-SEC-025 (the Job Token arrives in the execution request BODY,
+  #                    never in an environment variable, "because both appear in /proc,
+  #                    crash dumps and container inspection output").
+  #   no volumes    -- a sealed service retains nothing across executions (MOS-SVC-072).
+  #                    Its scratch is a tmpfs that dies with the container.
+  # -----------------------------------------------------------------------------------
+  medos-sealed-service:
+    image: medicalos/sealed-reference:0.3.0
+    build:
+      context: ../../..
+      dockerfile: medos/deploy/compose/Dockerfile.sealed
+    container_name: medos-sealed-service
+    restart: unless-stopped
+    # MOS-SVC-050, read off the running container by the test rather than trusted here.
+    # 65534 is `nobody` and matches `execution.sealed.user` in the vendor's manifest.
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      # `execution.sealed.scratch_mount`. A tmpfs and not a volume: MOS-SVC-072 forbids
+      # retaining anything across executions, and a named volume would survive the
+      # container that produced it.
+      - /var/tmp/medicalos:size=64m,mode=1777
+    environment:
+      # The complete environment. Nothing here is a credential or an address; compare any
+      # other service in this file.
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    networks: [sealed]
+    healthcheck:
+      # `/healthz` is row 1 of the section 2.5.2 ABI table. `/readyz` is row 2 and means
+      # "weights loaded"; compose wants liveness here, and MOS-SVC-026's readiness gate is
+      # the invoker's business (it runs the self-test once per pod after readiness).
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          sys.exit(0 if urllib.request.urlopen("http://localhost:8080/healthz", timeout=3).status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  # -----------------------------------------------------------------------------------
+  # medos-trainer-environment: a one-shot that WRITES MEDOS_TRAINING_ENVIRONMENT.
+  #
+  # REGISTER ENTRY 82 IS WHY THIS IS A SERVICE AND NOT NINE LINES OF YAML HERE.
+  # `medos/medos/api/routes_training.py` refuses `503 TRAINING_ENVIRONMENT_NOT_RECORDED` unless
+  # nine keys are declared, and the entry records what happens if they are typed into
+  # this file: "`code_commit` and `image_digest` ... change with every build, so a value
+  # written into `docker-compose.yml` is correct exactly until the next
+  # `docker compose build` and silently false afterwards -- and it is silently false in
+  # the provenance record of every training run". `MOS-TRAIN-126` wants them "recorded
+  # rather than asserted".
+  #
+  # So the TRAINER declares them, about itself, and this container is the moment it does:
+  # it runs the trainer image, observes its own build stamp, its own installed nnU-Net
+  # and torch, the GPU compose just granted it, and the spec documents this deployment
+  # binds, writes the nine keys into a shared volume, and exits. `medos-api` waits for it
+  # to exit 0 and reads the file. Nobody edits anything, ever; a rebuild changes the
+  # declaration because it changes the image.
+  #
+  # WHY IT HOLDS THE GPU FOR A MOMENT. `MOS-TRAIN-124`'s `hardware` block names the GPU
+  # model, count, driver, CUDA, cuDNN and NCCL. Those are observations, and observing
+  # them needs the device. It exits in a few seconds and does not compete with anything;
+  # `MOS-TRAIN-123`'s pool rule is about a TRAINING JOB evicting a resident engine, and
+  # this allocates no memory on the card.
+  #
+  # IT REFUSES RATHER THAN DEGRADES. With no GPU attached it exits non-zero with the
+  # reason, `medos-api` never starts, and the operator is told the truth -- instead of a
+  # deployment that accepts training runs it will execute four days slower than the
+  # record says. `MEDOS_TRAINER_ALLOW_CPU=1` records a CPU deployment AS one.
+  # -----------------------------------------------------------------------------------
+  medos-trainer-environment:
+    # PROFILE `training`. THIS SERVICE, NOT TRITON, IS THE GPU BLOCKER. It carries the
+    # `&trainer-gpu` anchor below, and a device reservation fails at container-create --
+    # before the container's environment is ever read, which is why the documented
+    # `MEDOS_TRAINER_ALLOW_CPU=1` escape hatch could never be reached on a machine with
+    # no NVIDIA runtime: the variable is read by code that never runs.
+    #
+    # `medos-trainer` has carried `profiles: [training]` since it was written. This one
+    # did not, and the asymmetry was invisible because every machine that ran the stack
+    # had already built the image and had a GPU.
+    profiles: [training]
+    image: medicalos/trainer:0.3.0.dev0
+    build: &trainer-build
+      context: ../../..
+      dockerfile: trainer/Dockerfile
+      args:
+        # NOT defaulted. The Dockerfile refuses an empty one and names the script,
+        # because a default here is the entry-82 defect wearing a build argument.
+        # `trainer/build.sh` reads both out of git and is THE build.
+        MEDOS_CODE_COMMIT: "${MEDOS_CODE_COMMIT-}"
+        MEDOS_CODE_DIRTY: "${MEDOS_CODE_DIRTY-}"
+    container_name: medos-trainer-environment
+    restart: "no"
+    command:
+      - declare-environment
+      - --out
+      - /run/medos-training/training-environment.json
+    environment:
+      MEDOS_TRAINER_ALLOW_CPU: "${MEDOS_TRAINER_ALLOW_CPU-}"
+    volumes:
+      - training-environment:/run/medos-training
+    # MOS-TRAIN-121 C1: a separate deployable. It joins NO network -- it talks to nothing,
+    # reads no database and holds no credential; it writes one file and exits.
+    network_mode: "none"
+    deploy: &trainer-gpu
+      resources:
+        reservations:
+          devices:
+            # `docker compose up` on a host with no NVIDIA container runtime fails HERE,
+            # loudly, which is the intended behaviour: see the refusal note above.
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # -----------------------------------------------------------------------------------
+  # medos-trainer: the training deployable. It EXECUTES runs; it never starts one.
+  #
+  # `MOS-TRAIN-194` forbids "a drift alert that starts a training run, which produces a
+  # candidate, which passes a gate, which promotes itself". Nothing here starts a run: a
+  # row reaches `PENDING` because a named person pressed one control on the console
+  # (`MOS-UI-147`), and this container drives `PENDING -> RUNNING -> SUCCEEDED` the way
+  # `medos-worker` drives a claimed job. The verb it does not have is the requirement.
+  #
+  # WHY IT IS A SECOND IMAGE. `medicalos/medos` carries no torch, no MONAI and no
+  # nnU-Net; `MOS-TRAIN-225` forbids the planner from the serving image's import closure
+  # and `MOS-REL-108` forbids in-process plugin loading. This is the only container in
+  # the stack that can import torch, and `tests/integration/test_trainer_boundary.py`
+  # asserts that it stayed the only one.
+  #
+  # PROFILE `training`, SO IT IS OPT-IN. A 12 GB card is not a thing to occupy by
+  # default on a laptop that is also running Triton. `docker compose --profile training
+  # up -d medos-trainer` starts the supervisor; without the profile the rest of the stack
+  # comes up unchanged and submitted runs wait in `PENDING`, which is what the console
+  # already renders.
+  #
+  # WHAT IT HOLDS, AND WHAT IT DOES NOT. It reads and writes `training_runs` as
+  # `medicalos_app` -- it has to, `MOS-TRAIN-122` puts start and completion in the
+  # orchestrator's hands. It holds NO PACS credential, NO object-store credential and no
+  # API key, and it is not on the `pacs` or `sealed` networks. The child process it
+  # spawns per phase gets less still: `LocalProcessOrchestrator` constructs the child's
+  # environment from a five-variable allow-list rather than inheriting this one.
+  # -----------------------------------------------------------------------------------
+  medos-trainer:
+    image: medicalos/trainer:0.3.0.dev0
+    build: *trainer-build
+    container_name: medos-trainer
+    profiles: [training]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      medos-trainer-environment:
+        condition: service_completed_successfully
+    command: ["execute", "--watch", "15"]
+    # SHARED MEMORY, and it is not a tuning knob.
+    #
+    # nnU-Net's data augmentation runs in worker processes that hand batches back through
+    # /dev/shm. Docker gives a container 64 MiB of it by default, which is smaller than one
+    # 96x160x160 patch batch, so the workers die and the trainer reports only "One or more
+    # background workers are no longer alive" -- a message that names the symptom and not
+    # the cause, and that arrives after the run has been set up and started.
+    #
+    # Observed on this stack: a 1-epoch smoke run on Dataset512_MedOS10Big died this way
+    # within twenty seconds, and the same command with `--shm-size=8g` reached Epoch 0.
+    # The service reserved a GPU and never asked for the memory the GPU's feeder needs.
+    shm_size: "8gb"
+    environment:
+      MEDOS_DATABASE_URL: "postgresql://medicalos_app:${MEDOS_APP_PASSWORD:-medos_app}@postgres:5432/${MEDOS_PG_DB:-medos}"
+      MEDOS_TENANT_ID: "${MEDOS_TENANT_ID:-00000000-0000-0000-0000-000000000000}"
+      # `gateway` is the default and is the only route MOS-TRAIN-068 and MOS-TRAIN-199
+      # permit: the de-identified side of the Gateway, as the `dataset_export` consumer
+      # class. ON THIS DEPLOYMENT IT CANNOT PRODUCE A VOLUME, and the run fails saying so
+      # -- `medos/medos/gateway/app.py` answers 503 DEID_NOT_IMPLEMENTED for that class because
+      # the de-identification stage does not exist, and MOS-DATA-037 requires the egress
+      # to fail closed rather than emit identified data. That refusal is the correct
+      # behaviour of a working control, not a bug in this service.
+      #
+      # `directory` is for a site that exported its corpus out of band under its own
+      # de-identification; MEDOS_TRAINER_IMAGE_ROOT then names the export. It asserts
+      # NOTHING about provenance: MOS-EVID-021's de-identification status is recorded on
+      # the DatasetVersion at seal time and nothing here can add to it.
+      MEDOS_TRAINER_STAGER: "${MEDOS_TRAINER_STAGER-gateway}"
+      MEDOS_TRAINER_IMAGE_ROOT: "${MEDOS_TRAINER_IMAGE_ROOT-/var/lib/medos-trainer/export}"
+      # The epoch budget. Absent, the trainer runs nnU-Net's own 1000x250, which is the
+      # real thing and is hours. MOS-UI-149 keeps this off the console and
+      # `TrainingRunSubmitRequest` has no member for it, so it can only ever arrive from
+      # the deployment -- and the trainer writes whatever it used into the run's result,
+      # because a truncated fit whose record does not say so reads at the approval gate
+      # as a full one.
+      MEDOS_TRAINER_EPOCHS: "${MEDOS_TRAINER_EPOCHS-}"
+      MEDOS_TRAINER_ITERATIONS: "${MEDOS_TRAINER_ITERATIONS-}"
+      MEDOS_TRAINER_VAL_ITERATIONS: "${MEDOS_TRAINER_VAL_ITERATIONS-}"
+      MEDOS_TRAINER_LOG_LEVEL: "${MEDOS_LOG_LEVEL:-INFO}"
+    volumes:
+      # The run directories: `request.json`, the resolved cohort, the staged volumes, the
+      # fingerprint, the bundle. Named rather than bind-mounted so a `docker compose
+      # restart` does not lose a bundle that has been recorded in `training_runs`.
+      - trainer-runs:/var/lib/medos-trainer
+      - training-environment:/run/medos-training:ro
+    networks: [medos]
+    deploy: *trainer-gpu
+
+volumes:
+  # Named, not bind mounts. The DICOM store and the job database must survive
+  # `docker compose restart` so that a re-run of tests/e2e/test_demo.py exercises the
+  # idempotent path (MOS-IMG-085, MOS-EXEC-059) rather than a cold ingest.
+  # `docker compose down -v` is the documented reset -- and it is also what re-runs
+  # schema.sql, since the postgres image only runs initdb scripts on an empty volume.
+  postgres-data:
+  orthanc-db:
+  worker-work:
+  # The model artifact store. Survives `restart`; `down -v` resets it, after which
+  # medos-model-publish re-uploads medos/deploy/models/ on the next `up`.
+  minio-data:
+  # The Triton model repository. Starts EMPTY and is filled by medos-tritond from minio
+  # on every reconcile -- MOS-SVC-058 made observable: `docker compose down -v` removes
+  # every weight from this host and the next `up` re-stages them from the object store.
+  model-repo:
+  # MEDOS_TRAINING_ENVIRONMENT's nine keys, written by `medos-trainer-environment` on
+  # every `up` and read by `medos-api` as a file. A VOLUME and not a bind mount for the
+  # same reason `x-deid-provenance`'s comment gives about the capability overlay: it must
+  # be written by nothing that did not just write it. `down -v` removes it, and the next
+  # `up` regenerates it from whatever the trainer image then is -- which is the whole of
+  # register entry 82's fix.
+  training-environment:
+  # The run directories: staged cohorts, fingerprints and bundles. Survives `restart`,
+  # because `training_runs.bundle_object_key` points into it and a bundle the record
+  # names and the host has lost is worse than no record.
+  trainer-runs:
+
+networks:
+  medos:
+    driver: bridge
+  # MOS-DATA-006: "a dedicated network joined only by the PACS and the Gateway. A
+  # deployment in which any other container can open a TCP connection to the PACS port is
+  # non-conformant, whether or not it has a credential."
+  #
+  # `internal: true` additionally denies the PACS any outbound route. That is not what
+  # MOS-DATA-006 asks for -- it asks about INBOUND reachability -- but a PACS that cannot
+  # phone out is the cheapest available mitigation for the class of bug where a DICOM
+  # parser is talked into fetching something.
+  pacs:
+    driver: bridge
+    internal: true
+  # Z-SERVICE (chapter 8 section 8.1.1): "sealed-mode service containers ... Ingress from
+  # Z-PLATFORM; egress to Z-GATEWAY and the platform callback only."
+  #
+  # Joined by exactly three containers: medos-sealed-service (the vendor), medos-gateway
+  # (its one permitted egress -- MOS-SVC-025 restricts `network.egress` to a subset of
+  # ["dicom-gateway"]) and medos-worker (the sealed-service invoker of section 2.6.2 step
+  # 2, which is both the permitted ingress and MOS-SEC-029's "platform callback address").
+  #
+  # `internal: true` is MOS-SEC-029's "egress deny-all" in the form compose can express:
+  # no default route, so the container cannot reach the internet even if the vendor's code
+  # tries. Postgres, MinIO, Triton, medos-tritond and the PACS are NOT on this network and
+  # are therefore unroutable from it -- which is also true of the Kafka broker that arrives
+  # in this release, because it lands on `medos` like everything else in Z-DATA.
+  #
+  # This is the same construction as `pacs` above, applied to a different zone, and it is
+  # held up the same way: by a test that opens the connections
+  # (tests/integration/test_sealed_mode.py), not by this comment.
+  sealed:
+    driver: bridge
+    internal: true

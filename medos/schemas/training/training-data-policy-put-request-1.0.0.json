@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/training-data-policy-put-request/1.0.0.json",
+  "title": "TrainingDataPolicy put request",
+  "description": "The body of PUT /api/v1/tenants/{tenant_id}/training-policy, reserved by MOS-API-112 and registered in table 10.2-B row R4 against the permission training_data_policy.record. Chapter 17 owns the entity (MOS-TRAIN-072 through MOS-TRAIN-077); the columns are 0011_curation.up.sql's training_data_policies plus tenants.training_use_allowed. The two are one fact in two tables and the migration binds them in both directions with a deferred constraint trigger, which is why this one body carries both: a route that set the flag and a route that recorded the instrument would be two calls that can half-succeed. recorded_by is NOT a member -- MOS-TRAIN-073's 'named human who asserted it' is the authenticated principal.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "training_use_allowed"
+  ],
+  "properties": {
+    "training_use_allowed": {
+      "description": "MOS-TRAIN-072: each Tenant carries training_use_allowed boolean NOT NULL DEFAULT false, and when it is false the harvest MUST refuse with 403 TRAINING_USE_NOT_PERMITTED. There is no per-study, per-user or per-environment override and no platform-administrator bypass, so this flag is the whole switch and this route is the only place it moves by hand.",
+      "type": "boolean"
+    },
+    "policy": {
+      "$ref": "#/$defs/policy"
+    },
+    "revocation_reason": {
+      "description": "MOS-TRAIN-073's withdrawal field, required when training_use_allowed is false. training_data_policies_revocation_ck pairs it with revoked_at. MOS-TRAIN-076: revocation MUST NOT retroactively alter a sealed DatasetVersion, but it MUST block every new harvest.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    }
+  },
+  "allOf": [
+    {
+      "description": "MOS-TRAIN-073: setting training_use_allowed = true MUST require a TrainingDataPolicy record on the tenant, and the platform MUST refuse the flag without it. Setting it false is a withdrawal and takes a reason instead.",
+      "if": {
+        "properties": {
+          "training_use_allowed": {
+            "const": true
+          }
+        },
+        "required": [
+          "training_use_allowed"
+        ]
+      },
+      "then": {
+        "required": [
+          "policy"
+        ],
+        "not": {
+          "required": [
+            "revocation_reason"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "revocation_reason"
+        ],
+        "not": {
+          "required": [
+            "policy"
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "policy": {
+      "description": "MOS-TRAIN-073's field table. MOS-TRAIN-074 fixes the platform's posture toward legal_basis and basis_reference: it MUST NOT interpret them, validate them against a registry, or assess their sufficiency. It MUST store, digest, display and refuse-without. So legal_basis carries the closed enum and basis_reference a non-empty constraint, and there is no third check on either -- a platform that validated an approval number would have quietly assumed the assertion, which is the site's to make.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "legal_basis",
+        "basis_reference",
+        "scope",
+        "permits_redistribution"
+      ],
+      "properties": {
+        "legal_basis": {
+          "description": "MOS-TRAIN-073's closed set, verbatim and in its order. A value outside it is not a basis the platform has an opinion about; it is a basis nobody declared.",
+          "type": "string",
+          "enum": [
+            "broad_consent",
+            "research_ethics_approval",
+            "public_corpus_licence",
+            "data_processing_agreement",
+            "national_derogation"
+          ],
+          "x-medicalos-enum": "closed"
+        },
+        "basis_reference": {
+          "description": "The instrument: approval number, agreement id, licence SPDX id. Non-empty, and unvalidated beyond that (MOS-TRAIN-074).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "basis_document_digest": {
+          "description": "MOS-STORE-211's sha256_digest domain. Digest of the uploaded instrument, when one is held; absent when none is.",
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "scope": {
+          "description": "MOS-TRAIN-075: a harvest MUST be refused for any study outside scope. All five keys are required and none is optional, because the column's CHECK requires all five and an absent key is not an open bound -- it is a question nobody answered. date_to: null is how 'open-ended' is written.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "modalities",
+            "body_parts",
+            "capabilities",
+            "date_from",
+            "date_to"
+          ],
+          "properties": {
+            "modalities": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Z]{2,16}$"
+              }
+            },
+            "body_parts": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "capabilities": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{2,63}$"
+              }
+            },
+            "date_from": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            },
+            "date_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          }
+        },
+        "permits_redistribution": {
+          "description": "MOS-TRAIN-077: false MUST block the tenant's data from any vendor_evidence export (MOS-EVID-011) and from use as a golden fixture (MOS-TRAIN-061).",
+          "type": "boolean"
+        },
+        "expires_at": {
+          "description": "MOS-TRAIN-075: after this, the flag auto-reverts to false and the platform MUST emit tenant.training_use.expired. Absent means no expiry.",
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

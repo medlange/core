@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/dataset/1.0.0.json",
+  "title": "Dataset",
+  "description": "The wire form of one datasets row (0006_evidence.up.sql section 2): chapter 7 section 7.3.1's Dataset. Item type of table 10.2-B row 32. ONE Dataset IS ONE SOURCE AND ONE LICENCE, which is why row R26's seal names an existing one and does not create it: `custodian` is chapter 7's source_id, is carried verbatim into every manifest and exported bundle, and is the issuer fallback of MOS-EVID-010 when IssuerOfPatientID is absent -- so two collections sharing one row would share a patient-key space they do not share in reality. MOS-EVID-027 makes the licence travel with the exported bundle, and recording it is a legal act by the site on the same footing as the TrainingDataPolicy of MOS-TRAIN-073 that MOS-UI-110 keeps off the no-code surface. Row 33 (POST /datasets) is deliberately NOT declared in medos/api/v1/routes.{core,train}.yaml: it binds `dataset.write`, which section 8.3.2 registers as a spelling a build MUST fail on and which MOS-UI-104 forbids this surface propagating; re-pointing it is chapter 10's edit under register entry 5, and minting a parallel path so that the console could dodge the question would be a second answer to it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dataset_id",
+    "public_id",
+    "slug",
+    "display_name",
+    "purpose",
+    "custodian",
+    "visibility",
+    "licence_spdx",
+    "licence_text",
+    "licence_url",
+    "created_at"
+  ],
+  "properties": {
+    "dataset_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "public_id": {
+      "type": "string",
+      "pattern": "^ds_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,126}$"
+    },
+    "display_name": {"type": "string", "minLength": 1},
+    "purpose": {
+      "description": "MOS-EVID-026 is normative for this five-value set. It matters on the seal path: MOS-EVID-082 forbids an acceptance binding naming a DatasetVersion whose purpose is `training` or `tuning`, and MOS-UI-146 requires the console to check that at seal because discovering at evaluation time that no bar exists wastes the entire run.",
+      "type": "string",
+      "enum": ["training", "tuning", "evaluation", "acceptance", "monitoring"],
+      "x-medicalos-enum": "closed"
+    },
+    "custodian": {
+      "description": "Chapter 7's source_id -- `TCIA/LIDC-IDRI`, `site-a/pacs`. Never empty: an empty issuer silently merges two collections' patient keys (MOS-EVID-010). It is a source identifier and not an institution name, so MOS-EVID-116 and MOS-UI-113 are not engaged by rendering it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "visibility": {
+      "description": "MOS-EVID-012, mirrored exactly.",
+      "type": "string",
+      "enum": ["tenant_private", "tenant_shared", "public_readonly"],
+      "x-medicalos-enum": "closed"
+    },
+    "licence_spdx": {
+      "description": "MOS-EVID-027: non-null together with licence_text for any visibility other than tenant_private, enforced by datasets_licence_required. Null on a private dataset and null is not `no licence`.",
+      "type": ["string", "null"]
+    },
+    "licence_text": {"type": ["string", "null"]},
+    "licence_url": {"type": ["string", "null"]},
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "_comment": [
+    "The chapter 6 section 6.4 `service_version` manifest for the service that implements",
+    "`lung_nodule`. The `spec` block below validates against the platform's own schema --",
+    "`medos.registry.schemas.schema_for_kind('service_version')` -- and",
+    "tests/integration/test_lung_nodule.py asserts that rather than asserting it here.",
+    "",
+    "IT IS NOT PUBLISHED AS AN `artifacts` ROW, AND THE REASON IS NOT AN OVERSIGHT.",
+    "",
+    "`MOS-REG-025` requires `spec.models[]` to be non-empty in `mode: native` and every",
+    "`ref` to resolve to a `model_version` artifact whose `lifecycle_status` is VALIDATED",
+    "or APPROVED at publish time. The `model_version` schema in turn makes",
+    "`evaluation_run_id` REQUIRED, matching `^er_[0-9A-HJKMNP-TV-Z]{10,26}$`.",
+    "",
+    "This capability has no EvaluationRun. Its AcceptanceCriteria status is `unmet`, its",
+    "`evidence_reference` is null, and no cohort has been measured. Publishing it would",
+    "mean minting an `er_...` id for a run that never happened -- fabricated evidence, in",
+    "the one field the deployment gate reads. So the row is NOT written, and the blocker is",
+    "REPORTED instead.",
+    "",
+    "The blocker is a real one and it is general, not a property of this capability:",
+    "chapter 6's own lifecycle (`MOS-REG-020`) has DRAFT and REGISTERED states that",
+    "PRECEDE VALIDATED, but a manifest that cannot omit `evaluation_run_id` cannot be",
+    "registered before it has been evaluated. `MOS-REG-047` sharpens it: it REQUIRES a",
+    "deterministic capability ('`emphysema_laa` MUST be served in 0.1.0 by a deterministic",
+    "measurement rather than a learned model') while `MOS-REG-025` requires every native",
+    "ServiceVersion to reference a ModelVersion. A threshold has no weights, so the",
+    "ModelVersion it must reference describes a parameter set -- which `weights_availability`",
+    "has no value for (`platform_managed` and `vendor_sealed` are the only two).",
+    "",
+    "`models[0].ref` below therefore names an artifact that is DECLARED and not published.",
+    "A `publish()` of this manifest fails on the dangling ref, which is `MOS-REG-025`",
+    "working correctly."
+  ],
+
+  "kind": "service_version",
+  "id": "sv_lung_nodule_0_1_0",
+  "family_id": "sv_lung_nodule",
+  "service_id": "org.medicalos.lung-nodule",
+  "version": "0.1.0",
+  "lifecycle_status": "DRAFT",
+
+  "spec": {
+    "mode": "native",
+
+    "image": {
+      "ref": "medicalos/services-lung-nodule",
+      "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+
+    "capabilities": [
+      {
+        "id": "lung_nodule",
+        "outputs": ["segmentation", "detection", "measurement"]
+      }
+    ],
+
+    "modalities": ["CT"],
+
+    "series_selector_ref": "sel_lung_nodule_ct_axial",
+
+    "models": [
+      {
+        "ref": "mv_lung_nodule_threshold_0_1_0",
+        "role": "primary"
+      }
+    ],
+
+    "preprocessing_specs": [],
+
+    "resources": {
+      "gpu_required": false,
+      "cpu_millicores": 2000,
+      "memory_mib": 8192,
+      "max_concurrent_jobs": 2
+    },
+
+    "engineering_acceptance": {
+      "p95_wall_clock_seconds": 45.0,
+      "result_bundle_schema_validity": 1.0
+    },
+
+    "legal_manufacturer": {
+      "id": "lm_medicalos_research",
+      "name": "MedicalOS research build",
+      "device_serial_number": "RESEARCH-ONLY",
+      "software_versions": "lung_nodule 0.1.0"
+    },
+
+    "regulatory_status": [
+      {
+        "jurisdiction": "US",
+        "status": "not_a_medical_device",
+        "evidence_ref": null
+      },
+      {
+        "jurisdiction": "GB",
+        "status": "not_a_medical_device",
+        "evidence_ref": null
+      }
+    ],
+
+    "compatibility": {
+      "medicalos_api": "v1",
+      "service_contract": "1.0",
+      "runtime": {
+        "engine": "python",
+        "engine_version": "3.11",
+        "backend": "python"
+      }
+    }
+  },
+
+  "_engineering_acceptance_note": [
+    "`p95_wall_clock_seconds: 45` is a DECLARED engineering bar, NOT a measured p95. Three",
+    "studies are not a distribution and this manifest does not pretend otherwise; the bar",
+    "is set well above what was observed so that it is a ceiling rather than a claim.",
+    "",
+    "What WAS measured, on one machine, is the detection stage alone, across repeated runs:",
+    "4.1-4.7 s on LIDC-IDRI-0001 (133 slices, 2.5 mm), 8.1 s on LIDC-IDRI-0002 (261 slices,",
+    "1.25 mm) and 9.3-10.1 s on LIDC-IDRI-0019 (305 slices, 1.25 mm). The spread between",
+    "repeats of the same study is filesystem cache, not algorithmic variance -- the detector",
+    "is deterministic, which tests/integration/test_lung_nodule.py asserts directly.",
+    "Building the canonical volume is the platform's work, not the service's, and is not",
+    "counted here.",
+    "",
+    "`MOS-REG-049`: this block carries ENGINEERING bars only. Every clinical threshold",
+    "lives in the Capability's AcceptanceCriteria and NONE of those numbers appears here;",
+    "the registry MUST reject a service_version that declares clinical acceptance",
+    "thresholds in its own manifest, and test_lung_nodule.py asserts the separation."
+  ],
+
+  "_operating_points_note": [
+    "`operating_points` is ABSENT, and it took a spec contradiction to get there.",
+    "",
+    "`MOS-SVC-020`: 'capabilities[].operating_points ... MUST be empty when and only when",
+    "`deterministic: true`'. This capability has no score anywhere, so by that rule the",
+    "member must be present and empty.",
+    "",
+    "The platform's own schema refuses exactly that. `operating_points` carries",
+    "`minItems: 1`, so `\"operating_points\": []` -- the form MOS-SVC-020 mandates -- fails",
+    "validation. The member is OPTIONAL (`required` is `[id, outputs]`), so omission is the",
+    "only representable way to say 'no operating points'.",
+    "",
+    "And the condition MOS-SVC-020 attaches the rule to cannot be written down either:",
+    "there is no `deterministic` member anywhere in the service_version manifest schema.",
+    "",
+    "REPORTED, not patched. The schema is not edited to admit the empty array, because",
+    "`medos/medos/registry/schemas.py` is core and `MOS-REL-020` is the question of whether this",
+    "capability needs a core edit. It does not -- omission works -- but the contradiction",
+    "is real and belongs in the register, not in a commit message.",
+    "",
+    "`MOS-SVC-021` still applies with full force: no sensitivity, specificity or PPV may be",
+    "displayed for this capability on any surface, because there is no threshold to report",
+    "one at."
+  ]
+}

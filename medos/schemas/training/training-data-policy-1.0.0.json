@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/training-data-policy/1.0.0.json",
+  "title": "TrainingDataPolicy",
+  "description": "The wire form of the tenant's live training_data_policies row together with the tenants.training_use_allowed flag it licenses: chapter 17's TrainingDataPolicy (MOS-TRAIN-073), physical form 0011_curation.up.sql. Response body of table 10.2-B row R4. The terms are not editable after the fact -- the row's sealing trigger forbids changing legal_basis, basis_reference, basis_document_digest, scope, permits_redistribution or recorded_by -- so a correction is a new row and a withdrawal is revoked_at. MOS-TRAIN-074 requires the platform to DISPLAY what it stores, which is what this response is for.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "training_use_allowed",
+    "policy"
+  ],
+  "properties": {
+    "training_use_allowed": {
+      "description": "MOS-TRAIN-072's flag on the tenant. False and a live policy can coexist -- the flag may be turned off without withdrawing the instrument -- but true without one cannot: assert_training_policy_live() refuses it.",
+      "type": "boolean"
+    },
+    "policy": {
+      "description": "The live instrument, or null when the tenant has none. A revoked or expired row is still readable (the live partial unique index is WHERE revoked_at IS NULL), which is what MOS-TRAIN-076 needs in order to say which candidates predate a revocation; this member carries the LIVE one and null when there is none.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "training_data_policy_id",
+        "legal_basis",
+        "basis_reference",
+        "basis_document_digest",
+        "scope",
+        "permits_redistribution",
+        "recorded_by",
+        "recorded_at",
+        "expires_at",
+        "revoked_at",
+        "revocation_reason"
+      ],
+      "properties": {
+        "training_data_policy_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "legal_basis": {
+          "type": "string",
+          "enum": [
+            "broad_consent",
+            "research_ethics_approval",
+            "public_corpus_licence",
+            "data_processing_agreement",
+            "national_derogation"
+          ],
+          "x-medicalos-enum": "closed"
+        },
+        "basis_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "basis_document_digest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "modalities",
+            "body_parts",
+            "capabilities",
+            "date_from",
+            "date_to"
+          ],
+          "properties": {
+            "modalities": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Z]{2,16}$"
+              }
+            },
+            "body_parts": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "capabilities": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{2,63}$"
+              }
+            },
+            "date_from": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            },
+            "date_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          }
+        },
+        "permits_redistribution": {
+          "type": "boolean"
+        },
+        "recorded_by": {
+          "description": "MOS-TRAIN-073's named human, as a user id. MOS-API-006 forbids the name itself in a response body.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "revoked_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "revocation_reason": {
+          "description": "training_data_policies_revocation_ck: null if and only if revoked_at is null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      }
+    }
+  }
+}

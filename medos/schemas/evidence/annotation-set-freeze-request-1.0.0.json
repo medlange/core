@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/annotation-set-freeze-request/1.0.0.json",
+  "title": "AnnotationSet freeze request",
+  "description": "The body of POST /api/v1/dataset-versions/{dataset_version_id}/annotation-sets, table 10.2-B row R29, against the permission annotation_set.create. This is MOS-UI-129's explicit close-the-campaign action: the console MUST state before it that a frozen set cannot be appended to and that adding a reader or a case afterwards produces a NEW set (MOS-TRAIN-110), which 0006_evidence enforces with annotation_sets_frozen and annotations_frozen and which medos/medos/evidence/repo.py enforces by having no add_reader() at all.\n\nTHERE IS NO PER-CASE ANNOTATION PAYLOAD IN THIS BODY, AND THAT IS THE DESIGN. medos/medos/evidence/repo.py::freeze_annotation_set takes its entries from its caller in-process; a route that forwarded a client's entries would let a caller supply a reference standard no reader produced, and MOS-EVID-038's named readers would then be an assertion rather than a record. MOS-TRAIN-096 requires every MONAI Label session to authenticate as a MedicalOS User precisely so that the set can name its readers after the fact, and MOS-TRAIN-095 puts the annotation surface inside the evidence-plane network reading through the Gateway. The store those sessions write into does not exist in this platform yet (ch. 19 section 19.4.3), which medos/api/v1/routes.train.yaml records in the comment on this row -- naming the gap is the alternative to closing it with a request member that would outlive it. (There is no engine_absent: key: measured on both registries, the rows carry engine: and engine_also: and the absences live in the row comments.)\n\n`tool` is not a member either: MOS-UI-124 says the platform fills it from the deployed annotation stack and the operator does not type it. `reader_id` is a User principal and never a group, a rota, a shared login, a service account or an email address (MOS-UI-123): a shared account makes MOS-EVID-038 unsatisfiable after the fact.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "capability_id",
+    "label_definition_id",
+    "annotation_type",
+    "consensus_rule",
+    "readers",
+    "reference_of_record"
+  ],
+  "properties": {
+    "name": {
+      "description": "Unique per DatasetVersion (annotation_sets_name_uk). A name and not a digest, because MOS-UI-101 forbids the operator composing one and MOS-UI-147 renders the reference standard in a read-only summary that has to say something a human recognises.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "capability_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "label_definition_id": {
+      "description": "MOS-EVID-143: a capability_concepts row (MOS-REG-042, MOS-STORE-256). Chosen from the capability's concepts rather than typed.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "annotation_type": {
+      "description": "0006_evidence's CHECK, mirrored. MOS-UI-128 and MOS-TRAIN-095 make mask, bounding_box and point the MONAI Label types; case_label and measurement are chapter 7's and are collected elsewhere.",
+      "type": "string",
+      "enum": ["mask", "bounding_box", "point", "case_label", "measurement"],
+      "x-medicalos-enum": "closed"
+    },
+    "consensus_rule": {
+      "description": "MOS-EVID-039's six-value enum, mirrored exactly from the column. MOS-UI-125 requires the console to have stated, when two or more readers were assigned, that inter-reader agreement will be computed and will appear in every report citing the set (MOS-EVID-043) -- a Dice of 0.82 against a reference whose own inter-reader Dice is 0.84 is a different claim from the same 0.82 against 0.97.",
+      "type": "string",
+      "enum": [
+        "single_reader",
+        "majority_at_least_2",
+        "union",
+        "intersection",
+        "staple",
+        "arbitrated"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "consensus_params": {
+      "description": "MOS-EVID-039's per-rule parameters: min_agreeing for majority_at_least_2; iterations, convergence_tol, initial_sensitivity, initial_specificity and rng_seed for staple; arbitrator_id for arbitrated. MOS-TRAIN-105 is why staple's five are mandatory -- the reduction MUST be reproducible from the persisted per-reader masks alone, and a tool-side reduction recording none of them cannot be re-derived. The per-rule requirement is checked by medos/medos/evidence/repo.py rather than here, because JSON Schema can express the conditional and cannot express that the checker and the database agree on it; both do, and the integration test is what holds them together.",
+      "type": "object"
+    },
+    "readers": {
+      "description": "MOS-EVID-038: every AnnotationSet MUST name at least one reader, and a set with reader_count = 0 MUST be refused.",
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/reader"}
+    },
+    "reference_of_record": {
+      "description": "MOS-EVID-042: if the only available reference standard is algorithmic, the reader role MUST be `algorithm` and this MUST be false. An AcceptanceCriteria gate refuses a set whose flag is false, which is the point at which an algorithmic reference stops being usable as a bar rather than the point at which it stops being recordable.",
+      "type": "boolean"
+    }
+  },
+  "$defs": {
+    "reader": {
+      "title": "Annotation reader",
+      "description": "MOS-UI-124's structured inputs, which the console MUST collect and MUST NOT invent parallel ones for (MOS-TRAIN-097).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reader_id", "role"],
+      "properties": {
+        "reader_id": {
+          "description": "A MedicalOS User principal (MOS-UI-123, MOS-TRAIN-096). Never a group, a rota, a shared login, a service account or an email address.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["radiologist", "resident", "algorithm", "registry_extract"],
+          "x-medicalos-enum": "closed"
+        },
+        "years_experience": {"type": ["integer", "null"], "minimum": 0},
+        "board_certified": {"type": ["boolean", "null"]},
+        "specialty": {"type": ["string", "null"]},
+        "instructions_uri": {"type": ["string", "null"]},
+        "blinded_to": {
+          "description": "MOS-EVID-038's reader table and MOS-TRAIN-097's field set: what this reader could not see. MOS-TRAIN-104 and MOS-UI-216 make blinding a property of the surface rather than of the instructions -- enforcement is the session grant failing to resolve the value, never a value the client holds and does not paint -- so an entry here is a record of how the session was configured and not a promise the reader made.",
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

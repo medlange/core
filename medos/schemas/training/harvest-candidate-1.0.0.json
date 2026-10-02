@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/harvest-candidate/1.0.0.json",
+  "title": "HarvestCandidate",
+  "description": "The wire form of one harvest_candidates row (0011_curation.up.sql section 5), joined to its settled curation_decisions row when it has one. Item type of table 10.2-B row R24, the curation queue. THIS IS THE ROW THAT COMES CLOSEST TO A PATIENT, so what it does NOT carry is the specification. MOS-TRAIN-079 forbids PatientName, PatientBirthDate, AccessionNumber, institution free text and every source-space UID on a candidate, and MOS-UI-122 forbids the console displaying any of them; there is no member here for any of them, and study_instance_uid is the de-identified UID MOS-API-006 permits. institution_key is MOS-TRAIN-089's HMAC and never a name (MOS-EVID-116); MOS-UI-113 requires the console to assign its own stable tenant-local label -- Site A, Site B -- and forbids any control that resolves a label back to a name, which is why no display_name member exists to tempt one. instance_uids is NOT projected although the column carries it: a page of candidates carrying every SOP Instance UID has the size of the cohort's instance count, and the queue needs a count to render a row, not the list. `note` is not projected either -- MOS-UI-120 admits it as free text on the decision, and a free-text field written by one operator has no business on a list screen; row R2 serves it on the one decision being read.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "harvest_candidate_id",
+    "harvest_batch_id",
+    "patient_key",
+    "study_instance_uid",
+    "series_instance_uids",
+    "instance_count",
+    "geometry",
+    "acquisition_profile",
+    "institution_key",
+    "deid_policy_version",
+    "ran_on_platform",
+    "platform_outcome",
+    "review_outcome",
+    "score_band",
+    "acquisition_bucket",
+    "sampling_weight",
+    "corpus_generation",
+    "auto_excluded_predicate_id",
+    "decision",
+    "reason_code",
+    "decided_at"
+  ],
+  "properties": {
+    "harvest_candidate_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "harvest_batch_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "patient_key": {
+      "description": "MOS-EVID-010's HMAC(tenant_salt, issuer|patient_id). MOS-UI-122 permits it on screen where the operator needs to identify a case to a colleague, and requires the console to state that it is meaningless outside this tenant (MOS-EVID-011).",
+      "type": "string",
+      "pattern": "^pk_[a-z2-7]{16}$"
+    },
+    "study_instance_uid": {
+      "description": "The DE-IDENTIFIED UID. MOS-API-006 permits StudyInstanceUID in a response; MOS-TRAIN-079 forbids a source-space UID on this row, and the gateway's dataset_export consumer class is what makes the two compatible.",
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)*$"
+    },
+    "series_instance_uids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9]+(\\.[0-9]+)*$"
+      }
+    },
+    "instance_count": {
+      "description": "cardinality(instance_uids). A count and not the array, for the reason in this schema's description. MOS-EVID-037 skips L4 on a series with fewer than three instances, so the number is not decoration on this surface.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "geometry": {
+      "description": "The MOS-IMG-036 descriptor, verbatim from the column. MOS-TRAIN-111's geometry gate reads it at seal and MOS-UI-137 forbids the console resolving a geometry refusal by editing the PreprocessingSpec, so it is rendered for recognition rather than for editing.",
+      "type": "object"
+    },
+    "acquisition_profile": {
+      "description": "MOS-TRAIN-084's thirteen fields, copied from the source header WITHOUT imputation. Every key is present and a missing value is null, never a default (MOS-EVID-020): a default slice thickness of 1.0 mm on a header that carried none is indistinguishable from a measurement in every histogram that follows, including the C4 spread the seal computes. MOS-UI-112 requires the console to render null as a distinct facet value.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manufacturer",
+        "manufacturer_model_name",
+        "convolution_kernel",
+        "convolution_kernel_class",
+        "slice_thickness_mm",
+        "pixel_spacing_mm",
+        "kvp",
+        "exposure_mas",
+        "contrast_phase",
+        "iterative_recon_strength",
+        "station_key",
+        "institution_key",
+        "study_year"
+      ],
+      "properties": {
+        "manufacturer": {"type": ["string", "null"]},
+        "manufacturer_model_name": {"type": ["string", "null"]},
+        "convolution_kernel": {"type": ["string", "null"]},
+        "convolution_kernel_class": {"type": ["string", "null"]},
+        "slice_thickness_mm": {"type": ["number", "null"]},
+        "pixel_spacing_mm": {
+          "type": ["array", "null"],
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"type": "number"}
+        },
+        "kvp": {"type": ["number", "null"]},
+        "exposure_mas": {"type": ["number", "null"]},
+        "contrast_phase": {"type": ["string", "null"]},
+        "iterative_recon_strength": {"type": ["string", "null"]},
+        "station_key": {"type": ["string", "null"]},
+        "institution_key": {"type": ["string", "null"]},
+        "study_year": {"type": ["integer", "null"]}
+      }
+    },
+    "institution_key": {
+      "description": "MOS-TRAIN-089's HMAC. An unreadable value by construction, which is the whole point: MOS-UI-113 says C1 is unreasonable about a value the operator cannot distinguish, so the console assigns a stable local label in order of first appearance within the batch. That ordering is derived from the order this collection returns, which MOS-API-018 fixes as created_at DESC -- the reverse of draw order. The labelling is stable either way; it is not draw order, and a console that calls it `first seen` is describing its own list.",
+      "type": "string"
+    },
+    "deid_policy_version": {
+      "description": "MOS-TRAIN-069: the de-identification profile version this candidate was drawn under.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "ran_on_platform": {
+      "description": "MOS-TRAIN-083's fourth mandatory stratum. harvest_candidates_ran_ck makes this true exactly when platform_outcome is non-null.",
+      "type": "boolean"
+    },
+    "platform_outcome": {
+      "description": "The terminal jobs.state values (MOS-STORE-266) plus NOT_APPLICABLE from triage_decision.outcome (MOS-DATA-078). No value is invented. Null exactly when ran_on_platform is false.",
+      "type": ["string", "null"],
+      "enum": ["COMPLETED", "FAILED", "CANCELLED", "REJECTED", "NOT_APPLICABLE", null],
+      "x-medicalos-enum": "closed"
+    },
+    "review_outcome": {
+      "description": "The result-review states of chapter 9. A stratum of MOS-TRAIN-083 and a facet of MOS-UI-112.",
+      "type": ["string", "null"],
+      "enum": [
+        "UNREVIEWED",
+        "PENDING",
+        "IN_REVIEW",
+        "ACCEPTED",
+        "MODIFIED",
+        "REJECTED",
+        "EXPIRED",
+        "SUPERSEDED",
+        null
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "score_band": {"type": ["string", "null"]},
+    "acquisition_bucket": {"type": ["string", "null"]},
+    "sampling_weight": {
+      "description": "MOS-TRAIN-083: the REALISED per-case sampling weight, persisted on the candidate. Strictly positive -- a weight of zero is a case that was not drawn.",
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "corpus_generation": {
+      "description": "MOS-TRAIN-087. 0, 1 or 2 on a CANDIDATE: a candidate may be generation 2 and be excluded FOR it, and MOS-UI-128 requires it to be shown as an exclusion with a plain-language reason rather than silently omitted. A sealed case may not be generation 2 at all, which is why the manifest's CHECK is narrower than this one.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "auto_excluded_predicate_id": {
+      "description": "MOS-TRAIN-080 permits auto-EXCLUSION on a mechanical predicate and forbids auto-inclusion. MOS-UI-119 requires such an exclusion to be displayed in the queue CARRYING THE PREDICATE IDENTITY, never as an absence, which is why the id is on the row rather than only in the decision.",
+      "type": ["string", "null"]
+    },
+    "decision": {
+      "description": "The settled CurationDecision, or null when none exists. Three states and not two: MOS-TRAIN-081 aggregates exclusion reasons per cohort and reproduces them in every ValidationReport citing it, and an aggregate whose denominator includes candidates nobody decided about is not the fraction the reader thinks it is. seal_from_batch refuses while any candidate is null here.",
+      "type": ["string", "null"],
+      "enum": ["include", "exclude", null],
+      "x-medicalos-enum": "closed"
+    },
+    "reason_code": {
+      "description": "MOS-TRAIN-080's closed set, which MOS-UI-120 requires be presented as labelled choices with a one-line gloss and never as a free-text field. MOS-TRAIN-204 forbids any value whose meaning is a model outcome: there is no hard_case, no outlier and no model_performed_poorly, and adding one would make the exclusion tally a statement about the model rather than about the images. Null on an include and on an undecided candidate.",
+      "type": ["string", "null"],
+      "enum": [
+        "quality_artefact",
+        "wrong_anatomy",
+        "wrong_phase",
+        "prior_treatment",
+        "duplicate_patient",
+        "geometry_unsupported",
+        "annotation_infeasible",
+        "out_of_scope",
+        null
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "decided_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+# Requirements for medos/tools/deid/scrub_slicer_scenes.py
+#
+#   pip install -r medos/tools/deid/requirements.txt
+#
+# numpy  - only for numpy-aware comparison of NRRD header fields after a rewrite
+#          (pynrrd returns "space directions" etc. as ndarrays, so `==` on them
+#          returns an array rather than a bool).
+# pynrrd - only to VERIFY that a rewritten NRRD header round-trips through an
+#          independent parser. The rewrite itself is done on raw bytes; the voxel
+#          data is never decoded or re-encoded.
+#
+# Deliberately NOT required: highdicom, SimpleITK, pydicom. This tool touches
+# Slicer sidecars only - no DICOM object is read or written here.
+numpy>=1.24
+pynrrd>=1.0

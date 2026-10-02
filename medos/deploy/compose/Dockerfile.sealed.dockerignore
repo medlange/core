@@ -1,0 +1,16 @@
+# Build-context filter for deploy/compose/Dockerfile.sealed.
+#
+# BuildKit reads `<dockerfile>.dockerignore` in preference to the context root's, so this
+# is scoped to the VENDOR image and imposes nothing on the platform build beside it.
+#
+# The allow-list is three files, and the shortness is the point: a sealed vendor image
+# that can see the platform's source tree during its build is one `COPY` away from
+# carrying it. Compare `Dockerfile.dockerignore`, which admits the whole `medos` package
+# because the platform image installs it.
+*
+!medos/medos/sealed/reference.py
+!medos/deploy/sealed-reference/service.manifest.json
+!medos/deploy/sealed-reference/weights.bin
+
+**/__pycache__
+**/*.pyc

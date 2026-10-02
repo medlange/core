@@ -1,0 +1,39 @@
+# Build-context filter for deploy/compose/Dockerfile.
+#
+# BuildKit reads `<dockerfile>.dockerignore` in preference to the context root's
+# `.dockerignore`, so this stays scoped to the medos image instead of imposing a filter on
+# every future build in the repo.
+#
+# The context is the REPOSITORY ROOT (docker-compose.yml sets `context: ../../..`), because
+# the image installs the `medos` package and pyproject.toml lives at the top. Without this
+# file the context is ~3 MB of specification plus the whole .git directory, which is
+# uploaded to the daemon on every build.
+
+# Everything, then re-admit exactly what the Dockerfile COPYs. An allow-list, because a
+# deny-list silently starts shipping whatever the next directory added to the repo is.
+*
+!medos/medos
+!pyproject.toml
+!medos/deploy/compose/requirements.txt
+# The Service Plane and the registry DATA of the capabilities it ships. See the Dockerfile
+# block that COPYs them: `medos/services/` is not part of the `medos` distribution, and
+# `medos/examples/lung-nodule/` carries that capability's applicability envelope and coded-concept
+# overlay, both of which are read at run time.
+!medos/services
+!medos/examples/lung-nodule
+# TWO files out of medos/tools/, named one at a time. The default is to exclude medos/tools/
+# entirely, and admitting a directory rather than a file would let a future script
+# into the serving image without anybody deciding to put it there.
+#   publish_model.py -- the publish half of the packaging step.
+#   demo/seed_corpus.py -- the synthetic demo study, behind `--profile demo` and
+#     refusing unless MEDOS_ENV is exactly `dev`.
+!medos/tools/publish_model.py
+!medos/tools/demo
+# The coded-concept dictionary, and ONLY that file out of the frozen spike tree.
+
+# Re-exclusions inside the admitted tree. `**` patterns are applied after the `!` rules.
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+**/.ruff_cache

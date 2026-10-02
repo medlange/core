@@ -1,0 +1,419 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/capability-registration/1.0.0.json",
+  "title": "Capability registration document",
+  "description": "The shape of a Capability registry row: the nosology axis (MOS-REG-008), its coded-concept dictionary (MOS-REG-042), its declared measurements with UCUM units (MOS-REG-044), the SeriesSelector it is admitted by (MOS-DATA / MOS-SVC-022), the applicability envelope outside which it makes no claim (MOS-SVC-023), and the AcceptanceCriteria that is the clinical bar (MOS-REG-049). The $id authority is the one chapters 2, 5 and 10 fixed and docs/spec/99-known-inconsistencies.md entry 10 resolved in their favour; schemas.medicalos.org is the retired namespace and does not appear here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "capability_id",
+    "version",
+    "status",
+    "display_name",
+    "method_class",
+    "concepts",
+    "measurements",
+    "series_selector",
+    "applicability",
+    "acceptance_criteria",
+    "clinical"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "capability_id": {
+      "description": "MOS-REG-041: lower snake_case. MOS-REG-040 forbids modality, body part or technique in a capability id -- those are SeriesSelector's, not the nosology axis's.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "version": {
+      "description": "SemVer 2.0.0 without build metadata (MOS-SVC-010).",
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "status": {
+      "description": "MOS-REG-029: only a `supported` capability may be claimed by a published ServiceVersion.",
+      "type": "string",
+      "enum": [
+        "supported",
+        "reserved",
+        "deprecated"
+      ]
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "method_class": {
+      "description": "MOS-SAFE-012's honesty field, hoisted to the registry row so a surface can render it without loading the service. `deterministic_algorithm` is what keeps an HU threshold from being drawn as AI.",
+      "type": "string",
+      "enum": [
+        "deterministic_algorithm",
+        "learned_model",
+        "not_implemented"
+      ]
+    },
+    "concepts": {
+      "description": "MOS-REG-042: the Capability row is the SINGLE source of coded concepts for this clinical function. Every key here MUST resolve in the coded-concept dictionary; a second code table anywhere in the platform is forbidden.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "segment_profile",
+        "finding_type",
+        "segmented_property_type"
+      ],
+      "properties": {
+        "segment_profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "finding_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "segmented_property_type": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "measurements": {
+      "description": "MOS-REG-044: every measurement carries a non-empty UCUM unit. `concept_key` resolves in the dictionary; `parameters` carries every number the value depends on (MOS-REG-047 applied to a deterministic method).",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "measurement_id",
+          "concept_key",
+          "ucum_unit",
+          "scope"
+        ],
+        "properties": {
+          "measurement_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "concept_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ucum_unit": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "study",
+              "candidate"
+            ]
+          },
+          "computation_geometry": {
+            "type": "string",
+            "const": "source"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "series_selector": {
+      "description": "MOS-SVC-022: the service receives the series the platform selected and MUST NOT perform its own study-level selection. This is the reference form plus the constraints; Chapter 3 owns the evaluation semantics.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "modality",
+        "min_instances"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modality": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "min_instances": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "body_part_hint": {
+          "type": "string"
+        },
+        "exclude_series_description": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "_note": {
+          "description": "A prose annotation carried beside the data it explains. Machine-ignored; present because a registry row whose rationale lives only in a commit message is a row nobody can audit.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "applicability": {
+      "description": "MOS-SVC-023's machine-checkable envelope. The platform evaluates it before dispatch and produces REJECTED rather than FAILED outside it; the service re-evaluates it and MUST NOT rely on the platform having done so.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "constraints",
+        "marginal_policy_default"
+      ],
+      "properties": {
+        "marginal_policy_default": {
+          "type": "string",
+          "enum": [
+            "flag",
+            "reject"
+          ]
+        },
+        "constraints": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "attribute",
+              "kind",
+              "reason_code"
+            ],
+            "properties": {
+              "attribute": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "range",
+                  "enum"
+                ]
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "unit": {
+                "type": "string"
+              },
+              "reason_code": {
+                "description": "Chapter 5 section 5.3.1's job-level rejection vocabulary, restricted to the codes a capability is in a position to decide.",
+                "type": "string",
+                "enum": [
+                  "outside_applicability_envelope",
+                  "unsupported_geometry",
+                  "input_constraint_unmet",
+                  "service_declined"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "acceptance_criteria": {
+      "description": "MOS-REG-049: the CLINICAL bar belongs to the Capability, never to the ServiceVersion manifest. `status: unmet` is the honest value for a capability with no ValidationReport; MOS-EVID-090 then refuses a clinical Deployment, which is the intended consequence and not a bug.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "status",
+        "primary_metric",
+        "criteria"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "met",
+            "unmet",
+            "not_evaluated"
+          ]
+        },
+        "primary_metric": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "metric",
+              "bound",
+              "value",
+              "stratum",
+              "margin_rationale"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "metric": {
+                "type": "string",
+                "minLength": 1
+              },
+              "bound": {
+                "type": "string",
+                "enum": [
+                  "min",
+                  "max",
+                  "catastrophic_count"
+                ]
+              },
+              "value": {
+                "type": "number"
+              },
+              "margin": {
+                "type": "number"
+              },
+              "stratum": {
+                "type": "string",
+                "minLength": 1
+              },
+              "operating_point_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "score_threshold": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "margin_rationale": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "_note": {
+          "description": "A prose annotation carried beside the data it explains. Machine-ignored; present because a registry row whose rationale lives only in a commit message is a row nobody can audit.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "clinical": {
+      "description": "MOS-SAFE-013/014/015. `not_validated_for` and `known_failure_modes` are each required NON-EMPTY: 'a publisher with nothing to declare MUST write the entry explicitly'. `detection` is MOS-SAFE-014's closed enum.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intended_use",
+        "not_validated_for",
+        "known_failure_modes"
+      ],
+      "properties": {
+        "intended_use": {
+          "type": "string",
+          "minLength": 1
+        },
+        "not_validated_for": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "known_failure_modes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "text",
+              "detection",
+              "mitigation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Z]{2,4}-FM-[0-9]{3}$"
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "detection": {
+                "type": "string",
+                "enum": [
+                  "applicability_envelope",
+                  "output_plausibility_gate",
+                  "human_review",
+                  "none"
+                ]
+              },
+              "mitigation": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

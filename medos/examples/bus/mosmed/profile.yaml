@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: Apache-2.0
+# EXAMPLE PROFILE -- NOT A CONTRACT.
+#
+# This directory is the worked example of the SDK's schema-flexible bus adapter: the
+# message shapes below reproduce the integration style of an external management
+# system in the MosMed AI family (a Kafka message names a study; the processing result
+# is published back; errors go to their own topic), as described in the requirements
+# documents the repository owner supplied (БФТ / базовые диагностические требования,
+# 2026). ANOTHER INTEGRATION'S SCHEMAS WILL DIFFER -- that is the point of the mapping
+# layer. A deployment writes its own profile next to its configuration and passes it to
+# `medos.sdk.adapters.bus.MessageMapping` / `medos.sdk.runtime.ExternalWorker`.
+#
+# Shapes here are simplified from the example documents: field names and nesting follow
+# them (studyIUID, aiResult, dateTimeParams, ...), values in <angle brackets> are the
+# document's placeholders.
+
+# Inbound: a study to process. `fields` maps the external payload's keys to the SDK's
+# canonical StudyRequested fields.
+inbound:
+  topic: KAFKA-MESSAGE
+  fields:
+    studyIUID: study_uid
+    taskId: task_id
+    modelId: model_id
+    modelVersion: model_version
+
+# Outbound: the result of one run. `template` is the external JSON; {field} placeholders
+# draw from the SDK's canonical StudyResult document (see
+# medos.sdk.adapters.bus._event_document for the available field paths).
+outbound:
+  topic: DICOMREPORTNOTIFY
+  template:
+    studyIUID: "{study_uid}"
+    taskId: "{task_id}"
+    aiResult:
+      modelId: "{model_id}"
+      modelVersion: "{model_version}"
+      pathologyFlag: "{ai_result}"
+      report: "{report}"
+      conclusion: "{conclusion}"
+      dateTimeParams:
+        downloadStartDT: "{download_started_at}"
+        downloadEndDT: "{download_finished_at}"
+        processStartDT: "{process_started_at}"
+        processEndDT: "{process_finished_at}"
+      metrics: "{metrics}"
+
+# Errors, if the external system defines a topic for them. The template fields are the
+# worker's error descriptor (study_uid, task_id, error, description, traceback).
+error:
+  topic: PUMCONSUMERERROR
+  template:
+    studyIUID: "{study_uid}"
+    taskId: "{task_id}"
+    aiResult:
+      error: "{error}"
+      description: "{description}"

@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/training-run-submit-request/1.0.0.json",
+  "title": "TrainingRun submit request",
+  "description": "The body of POST /api/v1/training-runs, table 10.2-B row R6, bound to training_run.submit. THIS SCHEMA IS THE ANSWER TO 'WHAT IS TRAIN, AS ONE HTTP ACTION'. MOS-UI-147 makes Train a single action with no configuration over a read-only summary of four things -- the cohort, the split, the reference standard and the target capability -- so those four, as ids, are the entire body. MOS-TRAIN-124 requires a TrainingRun to bind twenty-odd further inputs, and every one of them is SERVER-DERIVED: the three digests from the sealed and frozen rows the ids name, preprocessing_spec_id/version/digest from the capability's registered spec (MOS-IMG-045), code_commit / code_dirty / image_digest from the deployed training image (MOS-TRAIN-125), seeds / determinism / hardware / framework_versions from the run environment (MOS-TRAIN-126, recorded rather than asserted), and the entire derived plan from the cohort fingerprint (MOS-TRAIN-223). Each is absent here for the same reason: a value a client may supply is a value a client may supply WRONGLY, and a binding that records a client's claim about the GPU it ran on, or about the digest of a split it read a week ago, is a binding that says something false in a ValidationReport. MOS-UI-149's six quantities -- target spacing, intensity window and its statistics source, foreground crop rule, patch size, network topology, batch size -- are not omitted as an accident of minimalism: hyperparameters is not a member of this object at all, and with additionalProperties false a no-code client cannot reach any of them under any name. fit_partition and select_partition are likewise absent, and that absence is MOS-TRAIN-141 on the wire: the cohort resolver takes a split id and a partition name and nothing else, because a caller that can name its own partition can name test. There is no path, bucket, prefix, URI or glob member for the same reason (medos/medos/training/cohort.py reject_location_argument).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "capability_id",
+    "dataset_version_id",
+    "split_id",
+    "annotation_set_id"
+  ],
+  "properties": {
+    "capability_id": {
+      "description": "MOS-REG-041: lower snake_case, immutable, never reusable for a different clinical meaning. MOS-UI-171 restricts the chooser to rows at status supported; that is a listing rule on row 19 (GET /capabilities) and is not restated as a pattern here, because a pattern cannot express it and a schema that half-expressed it would read as though it did.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "dataset_version_id": {
+      "description": "The sealed DatasetVersion (MOS-EVID-015). Its digest is read from the row, never from this body: MOS-TRAIN-124 binds dataset_version_digest, and a client-supplied digest either repeats what the server already knows or contradicts it, and the second case records a cohort the run did not read.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "split_id": {
+      "description": "The frozen DatasetSplit (MOS-EVID-028). MOS-TRAIN-115 re-executes L1, L2, L3 and L5 against the frozen manifest before the first batch loads and refuses the submit rather than the run; MOS-UI-151 requires the console to re-verify and display the same preconditions first, so that the refusal arrives in the console rather than as a dead run.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "annotation_set_id": {
+      "description": "The reference standard (MOS-EVID-040), frozen (MOS-TRAIN-110). Its digest is server-read for the reason given on dataset_version_id.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "training_backend": {
+      "description": "OPTIONAL, and a no-code client MUST omit it. MOS-UI-148 fixes the console's backend to a dataset-fingerprint auto-configuring one -- nnunet or auto3dseg -- and forbids offering monai_supervised; omitting this member is how that is satisfied, because the server then selects the auto-configuring backend from the fingerprint and there is nothing for an operator to choose. The member exists at all because MOS-TRAIN-211 contemplates a hand-configured run as a legitimate expert act and requires it to carry a rationale; an enum of two values here would leave that rule with nowhere on the wire to live, and the next client that needed a hand-configured run would get it by widening this enum with nobody re-deciding the rationale rule. version is NOT a member: the backend version is the one inside the deployed training image (MOS-TRAIN-124 binds image_digest), and a client-named version that disagrees with the running container is a recorded falsehood.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "description": "0013_training.up.sql's CHECK, verbatim and in its order. Closed under MOS-API-093: a client that renders an unknown backend as 'unknown' has lost the difference between an auto-configured run and a hand-configured one, which is the whole subject of MOS-TRAIN-211.",
+          "type": "string",
+          "enum": [
+            "monai_supervised",
+            "nnunet",
+            "auto3dseg"
+          ],
+          "x-medicalos-enum": "closed"
+        }
+      }
+    },
+    "backend_rationale": {
+      "description": "MOS-TRAIN-211: a hand-configured run MUST record a rationale of at least 20 characters naming what the auto-configured baseline failed to do. 0013_training.up.sql carries both halves as CHECKs -- length >= 20, and NULL unless kind is monai_supervised -- and the allOf below carries the same pair, so a body that names monai_supervised without a rationale is a 422 schema violation before a connection is opened, and a body that supplies a rationale for an auto-configured run is refused rather than silently dropped. MOS-UI-148 is explicit that this is a statement the no-code operator cannot truthfully make, so the console never reaches this member; the pairing is what stops a no-code client reaching monai_supervised by accident.",
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 2000
+    },
+    "search_id": {
+      "description": "Set when this run is a trial of a ConfigurationSearch (MOS-TRAIN-219: every trial MUST be an ordinary TrainingRun carrying the complete binding, and a search MUST NOT introduce a second, lighter run record). The same argument makes this one route rather than two: a separate trial-submission path would be that second record wearing a URL. MOS-UI-150 forbids the console from launching a search at all, so a no-code body omits this.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "trial_index": {
+      "description": "MOS-TRAIN-219. 0013_training.up.sql pairs the two columns with CHECK ((search_id IS NULL) = (trial_index IS NULL)); the allOf below is that CHECK on the wire. nominated is NOT a member: MOS-TRAIN-216 admits exactly one nomination per search and MOS-TRAIN-217 makes nominating an explicit recorded act, which is row R15, not a boolean on a submit.",
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "required": [
+          "training_backend"
+        ],
+        "properties": {
+          "training_backend": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "monai_supervised"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "backend_rationale"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "backend_rationale"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": [
+          "search_id"
+        ]
+      },
+      "then": {
+        "required": [
+          "trial_index"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "trial_index"
+          ]
+        }
+      }
+    }
+  ]
+}

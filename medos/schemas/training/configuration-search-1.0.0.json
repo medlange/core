@@ -1,0 +1,306 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/configuration-search/1.0.0.json",
+  "title": "ConfigurationSearch",
+  "description": "The wire form of one configuration_searches row (0013_training.up.sql section 3): chapter 17's ConfigurationSearch (MOS-TRAIN-213, MOS-TRAIN-218). Response body of table 10.2-B rows R13, R14 and R15. selection_margin IS projected here, unlike search_trial_score on TrainingRun, and the difference is deliberate: MOS-TRAIN-222 forbids a selection statistic on a surface presenting MODEL PERFORMANCE, and this resource presents a SEARCH -- the margin is the evidence for the nomination and medos/medos/training/search.py selection_is_noise() compares it against the seed-variance sd precisely so a reader can see when the winner beat the runner-up by less than a re-run of the same code would. Putting it on the run would have carried it onto every screen that renders a run, including the console MOS-UI-154 forbids it on; putting it here keeps it where the question it answers is asked.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "configuration_search_id",
+    "capability_id",
+    "parent_search_id",
+    "dataset_version_id",
+    "split_id",
+    "split_digest",
+    "annotation_digest",
+    "backend",
+    "fingerprint_digest",
+    "space",
+    "space_digest",
+    "strategy",
+    "seed",
+    "read_partitions",
+    "selection_metric",
+    "selection_partition",
+    "selection_folds",
+    "selection_rule",
+    "trials_planned",
+    "trials_completed",
+    "trials_failed",
+    "nominated_training_run_id",
+    "runner_up_training_run_id",
+    "selection_margin",
+    "budget",
+    "cost",
+    "code_commit",
+    "image_digest",
+    "state",
+    "search_digest",
+    "started_at",
+    "finished_at",
+    "created_at"
+  ],
+  "properties": {
+    "configuration_search_id": {
+      "type": "string",
+      "pattern": "^cs_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "capability_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "parent_search_id": {
+      "description": "MOS-TRAIN-217's re-nomination chain.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "dataset_version_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "split_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "split_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "annotation_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "version"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "fingerprint_digest": {
+      "description": "NOT NULL on this table, unlike on training_runs: a search over a cohort whose fingerprint was never derived cannot state which quantities were frozen, and MOS-TRAIN-220's overlap rule then has nothing to check against.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "space": {
+      "description": "Echoed as declared. MOS-TRAIN-220 makes the space the thing the digest is of, so serving the digest without the document would leave a reader unable to check the one against the other.",
+      "type": "object"
+    },
+    "space_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "strategy": {
+      "type": "string",
+      "enum": [
+        "grid",
+        "random",
+        "adaptive"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "read_partitions": {
+      "description": "MOS-TRAIN-214. Projected so that a reader can see the wall rather than take it on trust; test cannot appear, here or in the column.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "train",
+          "tune"
+        ],
+        "x-medicalos-enum": "closed"
+      }
+    },
+    "selection_metric": {
+      "type": "string",
+      "minLength": 1
+    },
+    "selection_partition": {
+      "type": "string",
+      "enum": [
+        "tune",
+        "train"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "selection_folds": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "selection_rule": {
+      "type": "string",
+      "minLength": 10
+    },
+    "trials_planned": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "trials_completed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "trials_failed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nominated_training_run_id": {
+      "description": "MOS-TRAIN-216: exactly one. 0013's training_runs_one_nomination unique partial index holds the other end of the same fact.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "runner_up_training_run_id": {
+      "description": "Required alongside the nomination on SUCCEEDED, and 0013 refuses the two being the same run. A nomination with no runner-up is a ranking of one, and selection_margin would then be a number about nothing.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "selection_margin": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_trials",
+        "max_gpu_hours",
+        "max_wall_clock_hours",
+        "max_ensemble_members",
+        "max_footprint_bytes"
+      ],
+      "properties": {
+        "max_trials": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_gpu_hours": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_wall_clock_hours": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_ensemble_members": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_footprint_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "cost": {
+      "description": "What the search actually spent, and why it stopped. MOS-TRAIN-234 requires the first bound reached to be recorded in stop_reason and a valid record to exist either way.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stop_reason"
+      ],
+      "properties": {
+        "stop_reason": {
+          "description": "0013's CHECK, verbatim. cancelled and failed are stop reasons too: a search that ended for either still has to say so rather than leave the column absent.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "space_exhausted",
+            "max_trials",
+            "max_gpu_hours",
+            "max_wall_clock_hours",
+            "cancelled",
+            "failed",
+            null
+          ],
+          "x-medicalos-enum": "closed"
+        },
+        "gpu_hours": {
+          "type": "number",
+          "minimum": 0
+        },
+        "wall_clock_hours": {
+          "type": "number",
+          "minimum": 0
+        },
+        "footprint_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "code_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    },
+    "image_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "PENDING",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "search_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "started_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

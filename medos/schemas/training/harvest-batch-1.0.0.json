@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/harvest-batch/1.0.0.json",
+  "title": "HarvestBatch",
+  "description": "The wire form of one harvest_batches row: chapter 17's HarvestBatch / CurationBatch (MOS-TRAIN-078, MOS-TRAIN-083, MOS-TRAIN-202), physical form per chapter 12 section 12.12.1 as rendered by 0011_curation.up.sql. Response body of table 10.2-B row R1. The entity is chapter 17's and is not redefined here. There is no public_id column on this table -- unlike the 0013_training tables, which carry tr_/cs_/cv_ prefixed ULIDs -- so the wire id is the row's UUIDv7 surrogate key (MOS-STORE-208).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "harvest_batch_id",
+    "capability_id",
+    "sampling_plan_id",
+    "training_data_policy_id",
+    "state",
+    "candidate_count",
+    "dataset_version_id",
+    "opened_by",
+    "opened_at",
+    "sealed_at"
+  ],
+  "properties": {
+    "harvest_batch_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "capability_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "sampling_plan_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "training_data_policy_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "state": {
+      "description": "The harvest_batches state CHECK, verbatim and in its order. Closed under MOS-API-093: adding a value is a breaking change, because a client that renders an unknown batch state as 'unknown' has lost the difference between SEALED and ABANDONED.",
+      "type": "string",
+      "enum": [
+        "OPEN",
+        "SAMPLED",
+        "CURATING",
+        "SEALED",
+        "ABANDONED"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "candidate_count": {
+      "description": "Drawn candidates. A count, not a page total: MOS-API-016 forbids a total count on a collection endpoint, and this is a column on the batch rather than a scan.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "dataset_version_id": {
+      "description": "Set when MOS-TRAIN-082 seals a DatasetVersion from the batch; null before that. harvest_batches_sealed_version_ck makes SEALED and a null dataset_version_id mutually exclusive.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "opened_by": {
+      "description": "The principal that opened the batch. A user id, not a name: MOS-API-006 forbids a direct identifier in any response body.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "opened_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sealed_at": {
+      "description": "harvest_batches_sealed_at_ck: non-null if and only if state is SEALED.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}

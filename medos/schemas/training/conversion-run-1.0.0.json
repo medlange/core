@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.medicalos.org/schemas/v1/conversion-run/1.0.0.json",
+  "title": "ConversionRun",
+  "description": "The wire form of one conversion_runs row (0013_training.up.sql section 4): chapter 17's ConversionRun (MOS-TRAIN-156 to MOS-TRAIN-169). Response body of table 10.2-B rows R16 and R17. The equivalence object is served in full rather than reduced to its verdict, because MOS-TRAIN-161 requires three quantities computed per case at three points in the pipeline and MOS-REG-104 names max_abs_logit_diff while MOS-TRAIN-161 forbids it being the gating quantity -- a response that carried only pass or fail would leave a reader unable to tell which of those two sentences the platform was obeying.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "conversion_run_id",
+    "source_model_version_id",
+    "target_model_version_id",
+    "target_format",
+    "precision",
+    "toolchain",
+    "built_for",
+    "calibration_dataset_version_id",
+    "calibration_partition",
+    "equivalence_cohort_digest",
+    "equivalence",
+    "code_commit",
+    "image_digest",
+    "state",
+    "failure_reason",
+    "started_at",
+    "finished_at",
+    "created_at"
+  ],
+  "properties": {
+    "conversion_run_id": {
+      "type": "string",
+      "pattern": "^cv_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "source_model_version_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "target_model_version_id": {
+      "description": "Null until SUCCEEDED, and 0013 refuses it equalling the source. MOS-TRAIN-164: a conversion failing any tolerance MUST NOT be registered, so a null here on a finished run is the whole of the answer.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "target_format": {
+      "type": "string",
+      "enum": [
+        "torchscript",
+        "onnx",
+        "tensorrt_plan"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "precision": {
+      "type": "string",
+      "enum": [
+        "fp32",
+        "tf32",
+        "fp16",
+        "int8"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "toolchain": {
+      "type": "object"
+    },
+    "built_for": {
+      "description": "Required for tensorrt_plan by 0013's CHECK: a plan is only loadable on the compute capability, TensorRT version and CUDA version it was built against, and a plan whose target hardware is unrecorded is an artifact nobody can tell will load until it does not.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "cuda_compute_capability",
+        "tensorrt_version",
+        "cuda_version"
+      ],
+      "properties": {
+        "cuda_compute_capability": {
+          "type": "string"
+        },
+        "tensorrt_version": {
+          "type": "string"
+        },
+        "cuda_version": {
+          "type": "string"
+        }
+      }
+    },
+    "calibration_dataset_version_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "calibration_partition": {
+      "description": "tune or null; 0013 admits no third value. MOS-TRAIN-157.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "tune",
+        null
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "equivalence_cohort_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "equivalence": {
+      "description": "MOS-TRAIN-161's three quantities plus the members 0013 requires on SUCCEEDED. Empty object before the check has run.",
+      "type": "object",
+      "properties": {
+        "E1": {
+          "type": "number"
+        },
+        "E2": {
+          "type": "number"
+        },
+        "E3": {
+          "type": "number"
+        },
+        "max_abs_logit_diff": {
+          "description": "MOS-REG-104 names it and MOS-TRAIN-161 forbids it being the gating quantity. Recorded, reported, and not the answer.",
+          "type": "number"
+        },
+        "tolerances": {
+          "description": "The bounds this run was judged against, as the platform held them. Served so that a reader can see the comparison; MOS-TRAIN-164 makes them unsettable by a caller, which is why they appear on the response and not on the request.",
+          "type": "object"
+        },
+        "n_cases": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail"
+          ],
+          "x-medicalos-enum": "closed"
+        }
+      },
+      "additionalProperties": false
+    },
+    "code_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    },
+    "image_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "state": {
+      "description": "0013's CHECK. There is no CANCELLED: a conversion is short and chapter 17 gives it no cancel verb, so the API declares none either.",
+      "type": "string",
+      "enum": [
+        "PENDING",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED"
+      ],
+      "x-medicalos-enum": "closed"
+    },
+    "failure_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "started_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

@@ -1,0 +1,551 @@
+# SPDX-License-Identifier: Apache-2.0
+# =====================================================================================
+# medos/api/v1/routes.core.yaml -- the PACS-and-models service's route registry.
+#
+# ONE OF TWO. `medos/api/v1/routes.train.yaml` carries the model-preparation service's, and
+# the two files exist because the two products do. `medos/tools/permcheck.py` checks each
+# against ITS OWN app: this file against `medos.api.app:create_app`, the other against
+# `medos.api.training_plane:create_training_app`. A single registry checked against a
+# single app could only ever be right about one of them -- read against Core it would
+# report 33 declared-but-unserved rows on a correct deployment, and read against Train
+# it says nothing at all about what Core serves.
+#
+# WHAT IS NOT HERE, AND THE ABSENCE IS THE POINT. No `schemas`, no `api_problem_types`,
+# no `training_problem_types`. All 34 schemas and all 15 problem types in the original
+# single registry were referenced only by model-preparation routes and minted only by
+# `medos/medos/api/routes_curation.py`; Core referenced none of them. That was MEASURED when
+# the file was split rather than assumed, and it is why the cut is clean.
+#
+# Core's response schemas -- `Page<ServiceVersion>`, `ServiceVersion`, `Job` and the
+# rest -- are named by their routes and were never entries in the `schemas` block.
+# They resolve to files under `schemas/`, which `medos/tools/permcheck.py` checks exactly as
+# it did before.
+# =====================================================================================
+
+version: v1
+
+# -------------------------------------------------------------------------------------
+# THIS FILE HAS NO `schemas` BLOCK, AND THIS COMMENT USED TO DESCRIBE ONE. It survived
+# the split at `b39ea3b` without the block it introduced, so it sat above `coverage:`
+# explaining a `schemas` index and a `schemas_pending` list that are not here and
+# never were after the split.
+#
+# Where they went, and why the cut is clean: all 34 schema names and all 15 problem
+# types of the single pre-split registry were referenced only by model-preparation
+# routes and minted only by `medos/medos/api/routes_curation.py`. That was MEASURED at
+# the split rather than assumed. They are in `medos/api/v1/routes.train.yaml`, whose
+# header carries this explanation with its block. MOS-API-084 still makes `schemas/`
+# the single source of truth for every request body, response body, event payload and
+# problem extension, one file per type with an absolute `$id` under
+# https://spec.medicalos.org/schemas/v1/; Core's response schemas are named by their
+# routes and were never entries in a `schemas` block.
+# -------------------------------------------------------------------------------------
+
+coverage:
+  # Counted over THIS file, against `medos.api.app:create_app`. The table 10.2-B
+  # narrative totals the single registry used to carry moved to routes.train.yaml with
+  # the rows they describe: splitting a narrative count across two files would produce
+  # two numbers, neither of which answers the question it was written for.
+  served_entries: 29
+  reserved_entries: 0
+  routes_served_by_core_without_an_entry: 0
+
+routes:
+  # ---------------------------------------------------------------------------------
+  # Registry. Table 10.2-B rows 14-18 and 28-30, plus the eight routes chapter 6
+  # section 6.11 adds. Served by medos/medos/api/routes_registry.py over the one `artifacts`
+  # table of section 15.2.6.
+  #
+  # `service.publish` and `model.write` are NOT permissions: section 8.3.2's closing
+  # paragraph registers both as spellings a build MUST fail on, and they are carried in
+  # `medos/contracts/permissions.yaml` under `not_permissions`. They appear here because
+  # table 10.2-B rows 15 and 29 bind them and because the handlers enforce them today.
+  # docs/spec/99-known-inconsistencies.md entry 5 owns the resolution -- re-pointing the
+  # twenty-one rows at `service_version.publish` and `model.create` is chapter 10's
+  # change, not this one's, and inventing a mapping here would make a third answer.
+  # ---------------------------------------------------------------------------------
+  - operation_id: listServiceVersions
+    method: GET
+    path: /service-versions
+    summary: List service versions
+    permission: service.read
+    idempotency: not_applicable
+    status: served
+    table_row: "14"
+    responses:
+      "200":
+        schema: Page<ServiceVersion>
+    problems: [cross-tenant-denied, rate-limited]
+
+  - operation_id: publishServiceVersion
+    method: POST
+    path: /service-versions
+    summary: Publish an immutable signed release
+    permission: service.publish
+    permission_is_registered: false
+    idempotency: required
+    status: served
+    table_row: "15"
+    request:
+      media_type: application/json
+      schema: ServiceVersionCreateRequest
+    responses:
+      "201":
+        schema: ServiceVersion
+    problems: [schema-violation, idempotency-key-conflict, artifact-digest-conflict, cross-tenant-denied]
+
+  - operation_id: getServiceVersion
+    method: GET
+    path: /service-versions/{service_version_id}
+    summary: Read service version
+    permission: service.read
+    idempotency: not_applicable
+    status: served
+    table_row: "16"
+    responses:
+      "200":
+        schema: ServiceVersion
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: getServiceVersionManifest
+    method: GET
+    path: /service-versions/{service_version_id}/manifest
+    summary: Raw service.yaml as published
+    permission: service.read
+    idempotency: not_applicable
+    status: served
+    table_row: "17"
+    responses:
+      "200":
+        media_type: application/yaml
+        schema: null
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: getServiceVersionAttestation
+    method: GET
+    path: /service-versions/{service_version_id}/attestation
+    summary: Image digest, signature, SBOM reference, legal_manufacturer
+    permission: service.read
+    idempotency: not_applicable
+    status: served
+    table_row: "18"
+    responses:
+      "200":
+        schema: Attestation
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: getServiceVersionImpact
+    method: GET
+    path: /service-versions/{service_version_id}/impact
+    summary: Jobs, results and SeriesInstanceUIDs a recalled version produced
+    permission: service.read
+    idempotency: not_applicable
+    status: served
+    table_row: null
+    defined_by: MOS-REG-040
+    responses:
+      "200":
+        schema: RecallImpact
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: setServiceVersionStatus
+    method: POST
+    path: /service-versions/{service_version_id}/status
+    summary: Move a service version through the lifecycle graph
+    permission: artifact.status.set
+    permission_by_transition:
+      REGISTERED: artifact.publish
+      VALIDATING: evidence.run
+      VALIDATED: evidence.run
+      APPROVED: artifact.approve
+      DEPRECATED: artifact.status.set
+      SUSPENDED: artifact.suspend
+      RECALLED: artifact.recall
+    idempotency: optional
+    status: served
+    table_row: null
+    defined_by: MOS-REG-021
+    note: >-
+      `evidence.run` is not a key of medos/contracts/permissions.yaml. Section 8.3.2 registers
+      no such row, so under MOS-SEC-033 the two transitions that need it deny for every
+      principal; medos/contracts/permissions.yaml records it under `unregistered_in_use` and
+      this change does not invent the row, because chapter 8 owns permission spellings.
+    request:
+      media_type: application/json
+      schema: ArtifactStatusRequest
+    responses:
+      "200":
+        schema: ServiceVersion
+    problems: [schema-violation, lifecycle-transition-forbidden, not-found, cross-tenant-denied]
+
+  - operation_id: patchServiceVersion
+    method: PATCH
+    path: /service-versions/{service_version_id}
+    summary: Refused; a published manifest is immutable
+    permission: null
+    authn_only: true
+    idempotency: not_applicable
+    status: served
+    table_row: null
+    defined_by: MOS-REG-018
+    note: >-
+      Serves 405 unconditionally and reads nothing, so there is no permission to declare
+      and none is enforced. Chapter 6 section 6.11 lists the route precisely so that the
+      refusal is a contract rather than a framework default.
+    responses:
+      "405":
+        schema: null
+    problems: [method-not-allowed]
+
+  - operation_id: listModelVersions
+    method: GET
+    path: /model-versions
+    summary: List model versions
+    permission: model.read
+    idempotency: not_applicable
+    status: served
+    table_row: "28"
+    responses:
+      "200":
+        schema: Page<ModelVersion>
+    problems: [cross-tenant-denied, rate-limited]
+
+  - operation_id: publishModelVersion
+    method: POST
+    path: /model-versions
+    summary: Register a model version
+    permission: model.write
+    permission_is_registered: false
+    idempotency: required
+    status: served
+    table_row: "29"
+    request:
+      media_type: application/json
+      schema: ModelVersionCreateRequest
+    responses:
+      "201":
+        schema: ModelVersion
+    problems: [schema-violation, idempotency-key-conflict, artifact-digest-conflict, cross-tenant-denied]
+
+  - operation_id: getModelVersion
+    method: GET
+    path: /model-versions/{model_version_id}
+    summary: Read model version
+    permission: model.read
+    idempotency: not_applicable
+    status: served
+    table_row: "30"
+    responses:
+      "200":
+        schema: ModelVersion
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: getModelVersionManifest
+    method: GET
+    path: /model-versions/{model_version_id}/manifest
+    summary: Raw model manifest as published
+    permission: model.read
+    idempotency: not_applicable
+    status: served
+    table_row: null
+    defined_by: MOS-REG-015
+    responses:
+      "200":
+        media_type: application/yaml
+        schema: null
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: getModelVersionAttestation
+    method: GET
+    path: /model-versions/{model_version_id}/attestation
+    summary: Image digest, signature, SBOM reference for a model version
+    permission: model.read
+    idempotency: not_applicable
+    status: served
+    table_row: null
+    defined_by: MOS-REG-084
+    responses:
+      "200":
+        schema: Attestation
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: getModelVersionImpact
+    method: GET
+    path: /model-versions/{model_version_id}/impact
+    summary: Jobs, results and SeriesInstanceUIDs a recalled model version produced
+    permission: model.read
+    idempotency: not_applicable
+    status: served
+    table_row: null
+    defined_by: MOS-REG-040
+    responses:
+      "200":
+        schema: RecallImpact
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: setModelVersionStatus
+    method: POST
+    path: /model-versions/{model_version_id}/status
+    summary: Move a model version through the lifecycle graph
+    permission: artifact.status.set
+    permission_by_transition:
+      REGISTERED: artifact.publish
+      VALIDATING: evidence.run
+      VALIDATED: evidence.run
+      APPROVED: artifact.approve
+      DEPRECATED: artifact.status.set
+      SUSPENDED: artifact.suspend
+      RECALLED: artifact.recall
+    idempotency: optional
+    status: served
+    table_row: null
+    defined_by: MOS-REG-021
+    request:
+      media_type: application/json
+      schema: ArtifactStatusRequest
+    responses:
+      "200":
+        schema: ModelVersion
+    problems: [schema-violation, lifecycle-transition-forbidden, not-found, cross-tenant-denied]
+
+  - operation_id: patchModelVersion
+    method: PATCH
+    path: /model-versions/{model_version_id}
+    summary: Refused; a published manifest is immutable
+    permission: null
+    authn_only: true
+    idempotency: not_applicable
+    status: served
+    table_row: null
+    defined_by: MOS-REG-018
+    responses:
+      "405":
+        schema: null
+    problems: [method-not-allowed]
+
+  # ---------------------------------------------------------------------------------
+  # Jobs. Table 10.2-B rows 55, 57, 58 and 60, served by medos/medos/api/routes_jobs.py and
+  # medos/medos/api/routes_events.py.
+  #
+  # REPORTED, NOT RESOLVED HERE: neither module performs a permission check. The
+  # authentication middleware of medos/medos/api/auth.py binds the tenant and refuses an
+  # unauthenticated caller, so these routes are authenticated and tenant-isolated, but
+  # `job.create` and `job.read` are declared below AND ENFORCED, as of the change that
+  # added medos/medos/api/authz.py. They were declared and enforced nowhere until then, and
+  # tests/gate/test_declared_permissions_are_enforced.py is what keeps the two in step:
+  # it derives the claim from this file and checks the handler. MOS-API-089
+  # closes exactly this gap by registering each handler together with the `permission`
+  # value from its row -- which is the generator of MOS-API-086, and is why the
+  # declaration belongs here even though today it binds nothing.
+  # ---------------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------------
+  # Chapter 10 table 10.2-B row 7. AUTHN ONLY, and that is the table's word, not a gap:
+  # requiring a permission to discover your own permissions is a loop -- a credential with
+  # an empty scope could not learn that its scope is empty, and the surface would render an
+  # authenticated blank screen with nothing to explain itself. AuthenticationMiddleware
+  # still applies, so there is no anonymous access here.
+  #
+  # `permission: null` here therefore means "the table says none", NOT "nobody got round to
+  # it". The same is true of patchModelVersion and patchServiceVersion, for a different
+  # stated reason -- both serve 405 unconditionally and read nothing, so there is no
+  # permission to declare. All three carry `authn_only: true` to say so in the data rather
+  # than only in a comment; this one did not until the contract test asked.
+  # ---------------------------------------------------------------------------------
+  - operation_id: getCurrentPrincipal
+    method: GET
+    path: /users/me
+    summary: Identity and effective permissions of the caller
+    permission: null
+    authn_only: true
+    status: served
+    table_row: "7"
+    responses:
+      "200":
+        schema: Principal
+    problems: [unauthenticated]
+
+  - operation_id: createJob
+    method: POST
+    path: /jobs
+    summary: Create a job
+    permission: job.create
+    enforced_in_code: true
+    idempotency: required
+    status: served
+    table_row: "55"
+    request:
+      media_type: application/json
+      schema: JobCreateRequest
+    responses:
+      "202":
+        schema: Job
+        headers: [Location, Retry-After, MedicalOS-Idempotency-Key]
+    problems: [schema-violation, idempotency-key-conflict, rate-limited, cross-tenant-denied]
+
+  - operation_id: getJob
+    method: GET
+    path: /jobs/{job_id}
+    summary: Read job
+    permission: job.read
+    enforced_in_code: true
+    idempotency: not_applicable
+    status: served
+    table_row: "57"
+    responses:
+      "200":
+        schema: Job
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: streamJobEvents
+    method: GET
+    path: /jobs/{job_id}/events
+    summary: Job lifecycle event stream
+    permission: job.read
+    enforced_in_code: true
+    idempotency: not_applicable
+    status: served
+    table_row: "58"
+    responses:
+      "200":
+        media_type: text/event-stream
+        schema: EventEnvelope
+        headers: [Cache-Control]
+    problems: [not-found, cross-tenant-denied, stream-limit-exceeded]
+
+  - operation_id: getJobSeriesSelection
+    method: GET
+    path: /jobs/{job_id}/series-selection
+    summary: Selected and rejected series with reasons
+    permission: job.read
+    enforced_in_code: true
+    idempotency: not_applicable
+    status: served
+    table_row: "60"
+    responses:
+      "200":
+        schema: SeriesSelection
+    problems: [not-found, cross-tenant-denied]
+
+  # ---------------------------------------------------------------------------------
+  # Result reviews. MOS-SAFE-069's eight rows, which that requirement obliges to appear
+  # both in table 10.2-B (rows 67-69a) and in this file. Served by
+  # medos/medos/api/routes_reviews.py, which DOES enforce each permission below.
+  # ---------------------------------------------------------------------------------
+  - operation_id: listResultReviews
+    method: GET
+    path: /result-reviews
+    summary: List reviews
+    permission: result.review.read
+    idempotency: not_applicable
+    status: served
+    table_row: "67"
+    responses:
+      "200":
+        schema: Page<ResultReview>
+    problems: [cross-tenant-denied, rate-limited]
+
+  - operation_id: claimResultReview
+    method: POST
+    path: /result-reviews/{result_review_id}/claim
+    summary: PENDING to IN_REVIEW
+    permission: result.review.submit
+    idempotency: optional
+    status: served
+    table_row: "68"
+    request:
+      media_type: application/json
+      schema: null
+    responses:
+      "200":
+        schema: ResultReview
+    problems: [review-already-claimed, not-found, cross-tenant-denied]
+
+  - operation_id: releaseResultReview
+    method: POST
+    path: /result-reviews/{result_review_id}/release
+    summary: IN_REVIEW to PENDING; only by the current claimant
+    permission: result.review.submit
+    idempotency: optional
+    status: served
+    table_row: "68a"
+    request:
+      media_type: application/json
+      schema: null
+    responses:
+      "200":
+        schema: ResultReview
+    problems: [review-not-claimant, not-found, cross-tenant-denied]
+
+  - operation_id: submitResultReview
+    method: POST
+    path: /result-reviews/{result_review_id}/submit
+    summary: IN_REVIEW to ACCEPTED, MODIFIED or REJECTED
+    permission: result.review.submit
+    idempotency: required
+    status: served
+    table_row: "68b"
+    request:
+      media_type: application/json
+      schema: ResultReviewSubmitRequest
+    responses:
+      "200":
+        schema: ResultReview
+    problems: [schema-violation, idempotency-key-conflict, review-not-claimant, not-found]
+
+  - operation_id: assignResultReview
+    method: POST
+    path: /result-reviews/{result_review_id}/assign
+    summary: Set assignee_user_id
+    permission: result.review.assign
+    idempotency: optional
+    status: served
+    table_row: "68c"
+    request:
+      media_type: application/json
+      schema: ResultReviewAssignRequest
+    responses:
+      "200":
+        schema: ResultReview
+    problems: [schema-violation, not-found, cross-tenant-denied]
+
+  - operation_id: reopenResultReview
+    method: POST
+    path: /result-reviews/{result_review_id}/reopen
+    summary: New round, round + 1, PENDING
+    permission: result.review.reopen
+    idempotency: optional
+    status: served
+    table_row: "68d"
+    request:
+      media_type: application/json
+      schema: ResultReviewReopenRequest
+    responses:
+      "201":
+        schema: ResultReview
+    problems: [schema-violation, review-not-terminal, not-found]
+
+  - operation_id: getResultReview
+    method: GET
+    path: /result-reviews/{result_review_id}
+    summary: Read review, including every round
+    permission: result.review.read
+    idempotency: not_applicable
+    status: served
+    table_row: "69"
+    responses:
+      "200":
+        schema: ResultReview
+    problems: [not-found, cross-tenant-denied]
+
+  - operation_id: getReviewOfResult
+    method: GET
+    path: /results/{result_id}/review
+    summary: Convenience projection of the highest-round review
+    permission: result.review.read
+    idempotency: not_applicable
+    status: served
+    table_row: "69a"
+    responses:
+      "200":
+        schema: ResultReview
+    problems: [not-found, cross-tenant-denied]
