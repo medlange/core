@@ -845,7 +845,6 @@ SUITE_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     # and FAILS when the pin is absent, because a gate that skips when its dependency is
     # missing is not a gate. The suite is kept out of the default run by selection
     # (`-m trainer_internals`, its own CI job), never by skipping.
-    "trainer/tests": (),
     # The default for the integration suite: Postgres only.
     "tests/integration": ("postgres",),
     # `orthanc-rest` and `docker` because `_delete_study`'s teardown now runs

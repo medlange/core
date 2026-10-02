@@ -41,6 +41,20 @@ class SeriesRef:
     description: str = ""
 
 
+#: QIDO-RS returns the DICOM JSON model (PS3.18): rows keyed by hex tags, each
+#: `{"Value": [...], "vr": ...}`. Reading `row["SeriesInstanceUID"]` silently yields
+#: nothing -- MEASURED against the shipped gateway on 2026-10-02, which is how the SDK
+#:`s first live run caught it.
+def _tag(row: Mapping[str, Any], tag: str, default: str = "") -> str:
+    values = (row.get(tag) or {}).get("Value") or []
+    return str(values[0]) if values else default
+
+
+_TAG_SERIES_UID = "0020000E"
+_TAG_MODALITY = "00080060"
+_TAG_SERIES_DESCRIPTION = "0008103E"
+
+
 class PacsAdapter(Protocol):
     """The archive side of a pipeline run. Implementations are stateless-ish handles."""
 
@@ -89,9 +103,9 @@ class DicomWebPacs:
         return [
             SeriesRef(
                 study_uid=study_uid,
-                series_uid=str(row.get("SeriesInstanceUID") or ""),
-                modality=str(row.get("Modality") or ""),
-                description=str(row.get("SeriesDescription") or ""),
+                series_uid=_tag(row, _TAG_SERIES_UID),
+                modality=_tag(row, _TAG_MODALITY),
+                description=_tag(row, _TAG_SERIES_DESCRIPTION),
             )
             for row in rows
         ]

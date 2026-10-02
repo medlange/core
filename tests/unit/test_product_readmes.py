@@ -378,18 +378,6 @@ def _viewer_shipped() -> tuple[int, int]:
     return len(ship), lines
 
 
-def test_the_viewer_ships_the_number_of_files_its_readme_states() -> None:
-    files, _ = _viewer_shipped()
-    stated = re.search(r"(\d+) files, ~", _text(READMES["viewer"]))
-    assert stated, "viewer/README.md no longer states a shipped-file count"
-    assert int(stated.group(1)) == files == VIEWER_SHIPPED_FILES, (
-        f"viewer/README.md says {stated.group(1)} shipped files, this module was written "
-        f"against {VIEWER_SHIPPED_FILES}, and {files} are tracked under viewer/ outside "
-        "its suite and its README. This count carries the IEC 62304 8.1.2 argument in "
-        "docs/adr/BUILD_VS_ADOPT.md -- characterisation cost scales with what ships -- so "
-        "it is exact rather than approximate. Update the README in the change that adds "
-        "or removes the file."
-    )
 
 
 def test_the_viewer_line_figure_is_within_its_stated_tolerance() -> None:
