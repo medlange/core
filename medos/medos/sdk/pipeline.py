@@ -29,7 +29,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from medos.sdk.adapters.inference import InferenceAdapter, ModelOutput
 from medos.sdk.adapters.pacs import PacsAdapter, SeriesRef
@@ -37,6 +37,7 @@ from medos.sdk.modelcard import ModelCard
 from medos.sdk.postprocess import PostprocessResult, run_postprocess
 
 __all__ = [
+    "ResultWriter",
     "PipelineError",
     "StudyTask",
     "PipelineResult",
@@ -79,6 +80,7 @@ class PipelineResult:
     download_finished_at: datetime | None = None
     process_started_at: datetime | None = None
     process_finished_at: datetime | None = None
+    stored: tuple[Path, ...] = ()
     work_dir: Path | None = field(default=None, repr=False)
 
     @property
@@ -92,6 +94,21 @@ class PipelineResult:
         return (
             self.process_finished_at - self.process_started_at
         ).total_seconds()
+
+
+class ResultWriter(Protocol):
+    """Findings -> DICOM result objects (SEG/SR), ready to STOW.
+
+    THE SEAM, not an implementation. The shipped driver builds on the platform's
+    one writer (`medos.writer`, reached lazily the way the other adapters reach
+    their drivers); a site with its own conventions implements this protocol
+    against them. Writing a second SEG implementation is forbidden
+    (`MOS-IMG-003`'s one-implementation rule covers the whole exchange).
+    """
+
+    def write(self, result: PipelineResult, *, into: Path) -> Sequence[Path]:
+        """Write result DICOM files under `into` and return their paths."""
+        ...
 
 
 #: `(instance_paths) -> (volume, source_geometry, info)` -- the pure core's builder by
@@ -121,6 +138,7 @@ class Pipeline:
         inference: InferenceAdapter,
         select_series: Callable[[Sequence[SeriesRef]], Sequence[SeriesRef]] | None = None,
         volume_builder: VolumeBuilder | None = None,
+        writer: ResultWriter | None = None,
         keep_work_dir: bool = False,
     ) -> None:
         self.card = card
@@ -128,10 +146,18 @@ class Pipeline:
         self.inference = inference
         self.select_series = select_series or (lambda refs: refs)
         self.volume_builder = volume_builder or _default_volume_builder()
+        self.writer = writer
         self.keep_work_dir = keep_work_dir
 
     def run_study(self, task: StudyTask | str) -> PipelineResult:
-        """Fetch, preprocess, infer, postprocess. Refusals propagate; nothing is faked."""
+        """Fetch, preprocess, infer, postprocess; with a writer, store SEG/SR too.
+
+        Refusals propagate; nothing is faked. When `writer` is set, the findings
+        become DICOM result objects through the ONE writer implementation and are
+        STOWed back into the study through the same PACS adapter that fetched it;
+        a store failure is a PipelineError, because a result the archive does not
+        hold is a result that does not exist for the next reader.
+        """
         if isinstance(task, str):
             task = StudyTask(study_uid=task)
 
@@ -162,8 +188,37 @@ class Pipeline:
         findings = run_postprocess(self.card, model_output)
         process_finished = _utcnow()
 
+        stored: tuple[Path, ...] = ()
+        if self.writer is not None:
+            results_dir = work_dir / "results"
+            files = tuple(self.writer.write(
+                PipelineResult(
+                    task=task,
+                    series=selected,
+                    model_output=model_output,
+                    findings=findings,
+                    model_id=self.card.model_id,
+                    model_version=self.card.model_version,
+                    download_started_at=download_started,
+                    download_finished_at=download_finished,
+                    process_started_at=process_started,
+                    process_finished_at=process_finished,
+                    work_dir=work_dir,
+                ),
+                into=results_dir,
+            ))
+            try:
+                self.pacs.store(files, task.study_uid)
+            except Exception as exc:
+                raise PipelineError(
+                    f"study {task.study_uid}: results were written but the store "
+                    f"refused: {exc}"
+                ) from exc
+            stored = files
+
+        keep = self.keep_work_dir or bool(stored)
         kept_work_dir: Path | None = work_dir
-        if not self.keep_work_dir:
+        if not keep:
             import shutil
 
             shutil.rmtree(work_dir, ignore_errors=True)
@@ -180,5 +235,6 @@ class Pipeline:
             download_finished_at=download_finished,
             process_started_at=process_started,
             process_finished_at=process_finished,
+            stored=stored,
             work_dir=kept_work_dir,
         )

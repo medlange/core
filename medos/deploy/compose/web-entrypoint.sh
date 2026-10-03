@@ -56,6 +56,14 @@ set -e
 # and the container dies on `[emerg] unknown "medos_api_viewer_authorization" variable`,
 # which is exactly what happened to MEDOS_GATEWAY_VIEWER_KEY and is why this script exists.
 : "${MEDOS_API_VIEWER_AUTHORIZATION:=}"
+# THE API SPEAKS `Authorization: Bearer <key>`, and a RAW key placed here used to pass
+# through verbatim and fail with a bare 401 that named no cause -- found by the
+# user-journey E2E of 2026-10-02, where following the README exactly produced the raw
+# form. Prefix when the scheme is absent so both spellings work.
+if [ -n "${MEDOS_API_VIEWER_AUTHORIZATION}" ] \
+  && ! printf '%s' "${MEDOS_API_VIEWER_AUTHORIZATION}" | grep -qi '^Bearer[[:space:]]'; then
+  MEDOS_API_VIEWER_AUTHORIZATION="Bearer ${MEDOS_API_VIEWER_AUTHORIZATION}"
+fi
 export MEDOS_API_VIEWER_AUTHORIZATION
 
 # `${PORT}` WAS THE OHIF IMAGE'S OWN VARIABLE and is dropped with it: a plain nginx
