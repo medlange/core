@@ -29,9 +29,12 @@
   отдельной странице), выбор capability, индикатор прогресса, авто-перезагрузка SEG/SR
   наложением по готовности. ✅ 2026-10-03 (G-U3; заодно закрыт closure зависимостей
   capability через `GET /api/v1/capabilities` и кэш серий при перезагрузке)
-- **U4. Загрузка DICOM через вебморду.** Кнопка/drag-drop в ворклисте viewer'а →
-  STOW-RS на gateway (backend-путь с токеном viewer'а уже готов) → обновление списка,
-  problem-document при отказе. Запрошено пользователем 2026-10-03.
+- **U4. Загрузка DICOM через вебморду.** ✅ 2026-10-03 (G-U4): кнопка «Загрузить DICOM»
+  + drag-drop в ворклисте → STOW-RS `{dicomweb}/studies` (multipart/related руками,
+  FailedSOPSequence показывается читателю); live: LCTSC-Test-S1-201 из PulmoAI
+  (118 файлов) → 200 → исследование в ворклисте. Креденшел выбирается по методу
+  nginx-мапой: чтения — read-only viewer key, POST — uploader key (study.write),
+  не задан — 401 (решение развёртывания). Запрошено пользователем 2026-10-03.
 
 ## Фаза V — Viewer как фреймворк
 
@@ -40,8 +43,12 @@
 - **V2. Конфигурация без сборки.** `viewer.config` (включённые панели/модули, тема,
   брендинг, роутинг) — расширение нынешних `presets.json` / `protocols.json` /
   `build.json`. ✅ 2026-10-03 (G-V2)
-- **V3. Документация разработчика.** «Добавить панель за 30 строк», шаблон плагина,
-  гайд по тестам (viewer/tests — образец).
+- **V3. Документация разработчика.** ✅ 2026-10-03: `docs/getting-started.md`
+  («панель за 30 строк», шаги 1–6), `docs/plugin-template.md` (производственный
+  шаблон с гейтами в комментариях), `docs/testing.md` (устройство сьюта, 5 правил,
+  скелет теста); `tests/test_plugin_template.py` прогоняет гейты по коду из доков —
+  гайд не может протухнуть незаметно; dogfood: панель из гайда смонтирована в
+  браузере (правый рельс, «Серии») и пройдена сьютом, затем ревертнута.
 
 ## Фаза C — Core как полноценный SDK
 
@@ -53,10 +60,18 @@
   (G-C2; блокер последнего шага — nvcr.io 403, зафиксирован в e2e-staging/g-c2)
 - **C3. Профили развёртывания.** YAML-профиль адаптеров + `python -m medos.sdk run
   --profile local|mosmed`; публикация `medos` в PyPI. ✅ 2026-10-03 (G-C3; PyPI — ещё нет)
-- **C4. Документация + examples.** Локальный профиль, mosmed-профиль, cookbook.
+- **C4. Документация + examples.** ✅ 2026-10-03: cookbook
+  `medos/examples/profiles/README.md` — три живых рецепта (local → JSON-результат;
+  mosmed/Kafka: KAFKA-MESSAGE → `python -m medos.sdk run --once` → DICOMREPORTNOTIFY
+  с подлинным выводом; карточка→Triton) + таблица отладки; гейты в
+  `tests/unit/test_cookbook.py`; попутно исправлено направление `inbound.fields`
+  (внешний ключ → каноническое поле) в mosmed-профиле.
 - **C5. Живучесть (из E2E 2026-10-02).** Исправлено: QIDO DICOM JSON Model в PACS-адаптере.
-  Далее: селектор по умолчанию — CT-only с записанной причиной; словарь отказов pipeline
-  вместо голых исключений.
+  ✅ 2026-10-04: дефолтный селектор pipeline — CT-only, каждое исключение записано
+  (`PipelineResult.exclusions`: series_uid, modality, причина — derived/не-CT/кастомный
+  селектор); отказы pipeline — словарь (`PipelineError.code/study_uid/as_dict()`:
+  `no_eligible_series`, `store_refused`), CLI печатает словарь; профильный
+  `image_only` — явный opt-in, не тихий дефолт.
 
 ## Всплывшее по ходу (дефекты и долги)
 
@@ -103,12 +118,16 @@
   (закрытая схема: card/pacs/inference/writer/mode, секреты из env, отказы словарём
   профиля) + CLI с batch-дисциплиной; профили `medos/examples/profiles/{local,mosmed}.yaml`;
   e2e на живом стеке: LCTSC S1-104 из `F:/WorkSpace/PulmoAI` → 1 сегмент, exit 0.
+- **G-U4 ✅ (2026-10-03):** загрузка DICOM через UI viewer'а: S1-201 (118 файлов из
+  PulmoAI) → STOW-RS → 200 → ворклист 23→24; креденшел по методу (чтения read-only,
+  POST — uploader); 8 gate-тестов, viewer-сьют 244 зелёных.
 
 ## Порядок
 
-U1 → C1 → V1 → (U2, U3) → V2 → C2 → C3 ✅ (всё выше закрыто 2026-10-03) →
-дальше: **U4** (загрузка DICOM) → **V3** → **C4**, непрерывно по C5; долги
-(OHIF-closure, instance_norm, nvcr) — по мере касания их области.
+U1 → C1 → V1 → (U2, U3) → V2 → C2 → C3 → U4 → V3 → C4 → C5 — ✅ всё закрыто
+(2026-10-03/04). Дальше: долги (OHIF-closure, instance_norm в трейсере, nvcr-login
+для Triton, PyPI-публикация medos) — по мере касания их области; следующая фаза
+планирования — за пользователем.
 
 ## Вопрос «сложнее ли, чем в OHIF?» — ответ
 

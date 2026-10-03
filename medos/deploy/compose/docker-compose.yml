@@ -992,6 +992,12 @@ services:
       # browser for `authorization`, `bearer` and `btoa(`, and this one lives in nginx.
       # It is a GATEWAY token, not a PACS credential -- MOS-DATA-002 restricts the latter.
       MEDOS_GATEWAY_VIEWER_KEY: "${MEDOS_GATEWAY_VIEWER_KEY:-medos-dev-viewer-key}"
+      # THE UPLOAD CREDENTIAL (U4). nginx injects it on POST /dicomweb/ ONLY (STOW-RS);
+      # reads keep the read-only viewer key above, so a leaked reader credential still
+      # cannot alter the archive. This default is the laptop stand-in for A DEPLOYMENT
+      # DECISION: whether this surface may ingest at all. Unset it and uploads answer
+      # 401 — the correct refusal for a deployment that said no.
+      MEDOS_GATEWAY_UPLOADER_KEY: "${MEDOS_GATEWAY_UPLOADER_KEY:-medos-dev-worker-key}"
       # The viewer's PLATFORM credential for /api/ -- `Bearer <api key>` for a principal
       # holding `job.create`, injected by nginx only when the browser sent no Authorization
       # header of its own. See the `map` at the top of nginx.conf.template.

@@ -206,13 +206,17 @@ def _build_writer(table: Mapping[str, Any] | None) -> Any:
 
 
 def _selector(kind: str):
-    """The named series selectors, beside the pipeline's image-only default."""
+    """The named series selectors, beside the pipeline's CT-only default (C5).
+
+    `image_only` is an EXPLICIT opt-in for the permissive selector — since C5 the
+    pipeline default is CT-only, so "image_only" must not quietly degrade into it.
+    """
     if kind in ("image_only", ""):
-        return None
+        from medos.sdk.pipeline import _image_series_only  # noqa: PLC0415
+
+        return _image_series_only
     if kind == "ct_only":
-        def ct_only(series):
-            return [s for s in series if getattr(s, "modality", "") == "CT"]
-        return ct_only
+        return None  # the pipeline default; None keeps the default's exclusions
     raise ProfileError(f"profile: select_series is {kind!r}; one of 'image_only', 'ct_only'")
 
 
@@ -238,7 +242,7 @@ def load_profile(path: str | Path) -> Profile:
     pacs = _build_pacs(_req(raw, "pacs", "profile"))
     inference = _build_inference(_req(raw, "inference", "profile"), profile_dir)
     writer = _build_writer(raw.get("writer"))
-    select_kind = str(raw.get("select_series", "image_only"))
+    select_kind = str(raw.get("select_series", "ct_only"))
 
     mode = _req(raw, "mode", "profile")
     local_studies: tuple[str, ...] = ()

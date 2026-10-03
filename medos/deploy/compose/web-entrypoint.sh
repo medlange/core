@@ -56,6 +56,13 @@ set -e
 # and the container dies on `[emerg] unknown "medos_api_viewer_authorization" variable`,
 # which is exactly what happened to MEDOS_GATEWAY_VIEWER_KEY and is why this script exists.
 : "${MEDOS_API_VIEWER_AUTHORIZATION:=}"
+# MEDOS_GATEWAY_UPLOADER_KEY IS OPTIONAL AND CHOSEN BY METHOD (U4): reads at /dicomweb/
+# keep the read-only viewer key; STOW-RS POSTs carry this principal (study.write).
+# UNSET means the POST expansion is "Bearer " and the Gateway answers 401 -- the correct
+# answer for a deployment that has not enabled uploads. Named in the allowlist for the
+# same reason MEDOS_API_VIEWER_AUTHORIZATION is: an unlisted ${...} survives envsubst
+# verbatim and kills nginx as an unknown variable.
+: "${MEDOS_GATEWAY_UPLOADER_KEY:=}"
 # THE API SPEAKS `Authorization: Bearer <key>`, and a RAW key placed here used to pass
 # through verbatim and fail with a bare 401 that named no cause -- found by the
 # user-journey E2E of 2026-10-02, where following the README exactly produced the raw
@@ -70,7 +77,7 @@ export MEDOS_API_VIEWER_AUTHORIZATION
 # listens where its config says. The allowlist stays an allowlist -- envsubst with no
 # arguments would substitute EVERY `$name` in the file, and this template is full of
 # nginx's own ($uri, $request_uri, $http_authorization), which would be blanked.
-envsubst '${MEDOS_GATEWAY_VIEWER_KEY}${MEDOS_API_VIEWER_AUTHORIZATION}' \
+envsubst '${MEDOS_GATEWAY_VIEWER_KEY}${MEDOS_API_VIEWER_AUTHORIZATION}${MEDOS_GATEWAY_UPLOADER_KEY}' \
   < /usr/src/default.conf.template \
   > /etc/nginx/conf.d/default.conf
 

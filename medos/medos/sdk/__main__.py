@@ -56,7 +56,13 @@ def _cmd_run(argv: list[str]) -> int:
                 result = worker.submit(study_uid)
             except Exception as exc:  # a refused study must not lose the batch
                 failed += 1
-                print(json.dumps({"study": study_uid, "refused": str(exc)}))
+                as_dict = getattr(exc, "as_dict", None)
+                if callable(as_dict):
+                    # C5: the refusal is a dictionary — code is what an external
+                    # system matches on, detail is what a human reads.
+                    print(json.dumps({"study": study_uid, **as_dict()}))
+                else:
+                    print(json.dumps({"study": study_uid, "refused": str(exc)}))
                 continue
             print(json.dumps({
                 "study": study_uid,

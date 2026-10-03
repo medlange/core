@@ -55,6 +55,14 @@ CITED_AS_ABSENT: dict[str, str] = {
         "2026-09-26, and no such file has ever existed.' Naming it is how a reader who "
         "holds an older copy of that document finds out what happened to the claim."
     ),
+    "viewer/tests/test_dose_notes.py": (
+        "viewer/docs/plugin-template.md and viewer/docs/testing.md name it as the file "
+        "THE READER creates for the template panel — the template is a doc artifact "
+        "(its code is gate-checked by viewer/tests/test_plugin_template.py), and the "
+        "citation says the test does not exist until the reader writes it. Declared "
+        "rather than reworded so the sentence cannot quietly start naming a file that "
+        "isn't the reader's to write."
+    ),
 }
 
 

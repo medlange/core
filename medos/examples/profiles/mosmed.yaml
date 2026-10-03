@@ -30,12 +30,15 @@ external:
   inbound:
     topic: KAFKA-MESSAGE
     fields:
-      study_uid: studyInstanceUid
-      task_id: messageId
+      studyInstanceUid: study_uid
+      messageId: task_id
   outbound:
     topic: DICOMREPORTNOTIFY
     template:
       type: DICOMREPORTNOTIFY
+      studyIUID: "{study_uid}"
+      taskId: "{task_id}"
+      aiResult: "{ai_result}"
   error:
     topic: PUMCONSUMERERROR
     template:

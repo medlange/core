@@ -118,6 +118,36 @@ def test_the_deployment_mounts_the_presentation_config_over_the_viewers() -> Non
     )
 
 
+def test_the_upload_credential_is_chosen_by_method_and_carries_study_write() -> None:
+    """U4: reads at /dicomweb/ keep the read-only viewer key; STOW-RS POSTs carry the
+    uploader principal. Measured the day this was written: POSTing a batch with the
+    viewer key answered 403 'This principal does not hold study.write' -- the scope
+    ceiling doing its job, and the reason the write credential is a SEPARATE,
+    method-chosen injection and a deployment decision (compose default is the laptop
+    stand-in; unset means uploads answer 401)."""
+    template = (DEPLOY / "nginx.conf.template").read_text(encoding="utf-8")
+    assert "map $request_method $dicomweb_authorization" in template
+    assert re.search(
+        r"POST\s+\"Bearer \$\{MEDOS_GATEWAY_UPLOADER_KEY\}\"", template,
+    )
+    assert "proxy_set_header   Authorization $dicomweb_authorization;" in template, (
+        "the /dicomweb/ location must use the method-chosen credential, not the "
+        "literal viewer key"
+    )
+
+    compose = (DEPLOY / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "MEDOS_GATEWAY_UPLOADER_KEY" in compose, (
+        "the stack sets the uploader stand-in; without it every upload 401s"
+    )
+
+    entrypoint = (DEPLOY / "web-entrypoint.sh").read_text(encoding="utf-8")
+    assert "MEDOS_GATEWAY_UPLOADER_KEY" in entrypoint.split("envsubst")[-1].split("\n")[0] \
+        or "${MEDOS_GATEWAY_UPLOADER_KEY}" in entrypoint, (
+        "the envsubst allowlist must name the variable or nginx dies on an unknown "
+        "variable -- the failure mode this script exists for"
+    )
+
+
 def test_the_clinician_surface_carries_the_positioning_statement_verbatim() -> None:
     """`MOS-SAFE-001` names the web UI footer, and for four releases it was not there.
 

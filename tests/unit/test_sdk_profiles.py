@@ -141,13 +141,15 @@ inference: {kind: kserve_v2, url: "http://triton:8010"}
 mode: external
 external:
   bus: {kind: kafka, bootstrap_servers: "kafka:9092"}
-  inbound: {topic: IN, fields: {study_uid: sid}}
+  inbound: {topic: IN, fields: {studyInstanceUid: study_uid}}
   outbound: {topic: OUT, template: {type: R}}
   error: {topic: ERR, template: {type: E}}
 """
     profile = load_profile(_write(tmp_path, text))
     assert profile.mode == "external"
-    assert profile.external["inbound"]["fields"] == {"study_uid": "sid"}
+    # `fields` maps the EXTERNAL payload's key to the CANONICAL event field
+    # (decode_request reads it in exactly that direction).
+    assert profile.external["inbound"]["fields"] == {"studyInstanceUid": "study_uid"}
 
 
 def test_cli_run_walks_local_studies_and_continues_past_a_refusal(

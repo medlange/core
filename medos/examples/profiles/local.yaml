@@ -19,7 +19,8 @@ inference:
   url: "http://127.0.0.1:8010"        # Triton (профиль inference) или иной KServe v2
   model_version: null
 
-# Какие серии обрабатывать: image_only (умолчание pipeline) или ct_only.
+# Какие серии обрабатывать: ct_only (умолчание pipeline, C5) или image_only
+# (явный opt-in: все image-модальности, без derived SEG/SR/RTSTRUCT).
 select_series: ct_only
 
 writer:

@@ -41,6 +41,7 @@ __all__ = [
     "PipelineError",
     "StudyTask",
     "PipelineResult",
+    "SeriesExclusion",
     "Pipeline",
 ]
 
@@ -51,7 +52,31 @@ class PipelineError(RuntimeError):
     Not the training package's `TrainingError`: this module serves models, it does not
     train them, and one vocabulary per side keeps a serving refusal out of the corpus
     plane's reports.
-"""
+
+    C5: a refusal is a DICTIONARY, not a bare exception. `code` is the stable
+    identifier an external system matches on; `detail` is the human sentence; both
+    ride `as_dict()`, which the CLI and the bus error mapping emit verbatim.
+    """
+
+    def __init__(
+        self,
+        detail: str,
+        *,
+        code: str = "pipeline_refused",
+        study_uid: str = "",
+    ) -> None:
+        super().__init__(detail)
+        self.code = code
+        self.study_uid = study_uid
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "refused": {
+                "code": self.code,
+                "study_uid": self.study_uid,
+                "detail": str(self),
+            }
+        }
 
 
 def _utcnow() -> datetime:
@@ -64,6 +89,22 @@ class StudyTask:
 
     study_uid: str
     task_id: str = ""
+
+
+@dataclass(frozen=True)
+class SeriesExclusion:
+    """One listed series the selector dropped, WITH THE REASON (C5).
+
+    "The selector kept none" used to be the whole story an operator got. A study
+    that lists CT + SEG + SR and runs with the CT-only default now reports three
+    rows: the SEG/SR excluded because they are derived results, and — for a custom
+    deployment selector — the reason it owns. Selection is first-class data, the
+    same claim MOS-API-054 makes for the platform's jobs.
+    """
+
+    series_uid: str
+    modality: str
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -82,6 +123,7 @@ class PipelineResult:
     process_finished_at: datetime | None = None
     stored: tuple[Path, ...] = ()
     source_files: tuple[Path, ...] = ()
+    exclusions: tuple[SeriesExclusion, ...] = ()
     source_geometry: Any = field(default=None, repr=False)
     card: Any = field(default=None, repr=False)
     work_dir: Path | None = field(default=None, repr=False)
@@ -125,17 +167,41 @@ def _default_volume_builder() -> VolumeBuilder:
     return build_canonical_volume
 
 
-def _image_series_only(refs: Sequence[SeriesRef]) -> Sequence[SeriesRef]:
-    """Default selector: image modalities only, never the archive's derived objects.
+#: Modalities that are RESULTS, never input: a pipeline fetching them would run
+#: the model on its own outputs (measured on the live E2E of 2026-10-02).
+_DERIVED_MODALITIES = frozenset({"SEG", "SR", "RTSTRUCT", "RTPLAN", "RTDOSE", "PR", "KO", "SC"})
 
-    Derived modalities (SEG, SR, RTSTRUCT, ...) are results, not input; fetching
-    them into a model run is how a pipeline would read its own output. Anything
-    not recognized as derived is treated as image -- a novel modality runs rather
-    than being silently skipped, and the refusal when NOTHING remains still names
-    the study.
+
+def _image_series_only(refs: Sequence[SeriesRef]) -> Sequence[SeriesRef]:
+    """The permissive selector, kept as an explicit opt-in: image modalities only.
+
+    Deployments serving more than CT pass this (or their own callable) as
+    `select_series`. It is NOT the default since C5: the default is CT-only.
     """
-    derived = {"SEG", "SR", "RTSTRUCT", "RTPLAN", "RTDOSE", "PR", "KO", "SC"}
-    return [r for r in refs if r.modality.upper() not in derived]
+    return [r for r in refs if r.modality.upper() not in _DERIVED_MODALITIES]
+
+
+def _ct_only_default(refs: Sequence[SeriesRef]) -> Sequence[SeriesRef]:
+    """THE DEFAULT SELECTOR since C5: CT series only.
+
+    The shipped cards are CT models (the trainer's registered specs say so), and
+    an MR series fed to a CT model fails later and louder than a selector refusing
+    it now. Every dropped series is recorded with its reason in the result's
+    `exclusions` -- silent narrowing is how a deployment learns to distrust logs.
+    """
+    return [r for r in refs if r.modality.upper() == "CT"]
+
+
+def _default_exclusion_reason(ref: SeriesRef) -> str:
+    """Why the DEFAULT selector dropped this series. Custom selectors own their
+    reasons; the pipeline records theirs generically."""
+    m = ref.modality.upper()
+    if m in _DERIVED_MODALITIES:
+        return f"derived modality {m} is a result, not model input"
+    return (
+        f"default selector keeps CT only (got {m or 'unknown'}); "
+        "pass select_series to serve other modalities"
+    )
 
 
 class Pipeline:
@@ -160,12 +226,15 @@ class Pipeline:
         self.card = card
         self.pacs = pacs
         self.inference = inference
-        # THE DEFAULT SELECTOR KEEPS IMAGE SERIES ONLY. MEASURED on the live E2E of
-        # 2026-10-02: a study that already carries results lists its SEG/SR series
-        # too, and a pipeline that fetches them runs the model on its own outputs.
-        # A deployment narrows further (CT only, axial, largest) the way the
-        # platform's selectors do.
-        self.select_series = select_series or _image_series_only
+        # THE DEFAULT SELECTOR IS CT-ONLY SINCE C5, and every exclusion it makes is
+        # recorded on the result. What came before, measured on the live E2E of
+        # 2026-10-02: an image-only default, kept because a study that already
+        # carries results lists its SEG/SR series too, and a pipeline that fetches
+        # them runs the model on its own outputs. CT-only keeps that protection and
+        # adds the recorded reason; deployments serving MR/PT pass their own
+        # callable the way the platform's selectors do.
+        self._selector_is_default = select_series is None
+        self.select_series = select_series or _ct_only_default
         self.volume_builder = volume_builder or _default_volume_builder()
         self.writer = writer
         self.keep_work_dir = keep_work_dir
@@ -185,10 +254,31 @@ class Pipeline:
         download_started = _utcnow()
         listed = self.pacs.list_series(task.study_uid)
         selected = tuple(self.select_series(listed))
+        kept = {r.series_uid for r in selected}
+        if self._selector_is_default:
+            exclusions = tuple(
+                SeriesExclusion(r.series_uid, r.modality, _default_exclusion_reason(r))
+                for r in listed
+                if r.series_uid not in kept
+            )
+        else:
+            exclusions = tuple(
+                SeriesExclusion(
+                    r.series_uid, r.modality,
+                    "dropped by the deployment's series selector",
+                )
+                for r in listed
+                if r.series_uid not in kept
+            )
         if not selected:
+            why = "; ".join(f"{e.modality or '?'}: {e.reason}" for e in exclusions[:5])
             raise PipelineError(
                 f"study {task.study_uid}: the PACS lists {len(listed)} series and the "
-                f"selector kept none; there is nothing to run the model on"
+                f"selector kept none"
+                + (f" ({why})" if why else "")
+                + "; there is nothing to run the model on",
+                code="no_eligible_series",
+                study_uid=task.study_uid,
             )
         work_dir = Path(
             tempfile.mkdtemp(prefix=f"medos-{self.card.model_id}-")
@@ -225,6 +315,7 @@ class Pipeline:
                     process_started_at=process_started,
                     process_finished_at=process_finished,
                     source_files=tuple(fetched),
+                    exclusions=exclusions,
                     source_geometry=source_geometry,
                     card=self.card,
                     work_dir=work_dir,
@@ -236,7 +327,9 @@ class Pipeline:
             except Exception as exc:
                 raise PipelineError(
                     f"study {task.study_uid}: results were written but the store "
-                    f"refused: {exc}"
+                    f"refused: {exc}",
+                    code="store_refused",
+                    study_uid=task.study_uid,
                 ) from exc
             stored = files
 
@@ -261,6 +354,7 @@ class Pipeline:
             process_finished_at=process_finished,
             stored=stored,
             source_files=tuple(fetched),
+            exclusions=exclusions,
             source_geometry=source_geometry,
             card=self.card,
             work_dir=kept_work_dir,

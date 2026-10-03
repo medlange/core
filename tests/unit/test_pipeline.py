@@ -129,9 +129,14 @@ def test_a_study_runs_fetch_chain_infer_postprocess_in_order(tmp_path: Path) -> 
 
     result = pipeline.run_study(StudyTask(study_uid="1.2.3", task_id="task-1"))
 
-    assert pacs.fetched == ["1.2.3.1", "1.2.3.2"] or set(pacs.fetched) == {
-        "1.2.3.1", "1.2.3.2",
-    }
+    # C5: the DEFAULT selector is CT-only. The fake study lists an MR series next to
+    # the CT one; the default run fetches the CT series alone and records the
+    # exclusion with its reason — selection is first-class data, not a silent filter.
+    assert pacs.fetched == ["1.2.3.1"]
+    assert [(e.series_uid, e.modality) for e in result.exclusions] == [
+        ("1.2.3.2", "MR"),
+    ]
+    assert "CT only" in result.exclusions[0].reason
     segment = result.findings.segments[0]
     assert segment.name == selftest_spec_document()["io"]["label_set"][1]["name"]
     assert int(segment.mask.sum()) == 64  # the 4x4x4 blob the embedded model drew
@@ -201,14 +206,41 @@ def test_a_writer_closes_the_loop_write_store_record(tmp_path: Path) -> None:
     assert result.work_dir is not None
 
 
-def test_the_default_selector_skips_derived_series(tmp_path: Path) -> None:
+def test_the_default_selector_is_ct_only_and_records_reasons(tmp_path: Path) -> None:
+    """C5: CT-only default; derived modalities and non-CT images are dropped with a
+    reason each; the permissive image-only selector survives as an explicit opt-in."""
     from medos.sdk.adapters.pacs import SeriesRef
-    from medos.sdk.pipeline import _image_series_only
+    from medos.sdk.pipeline import _ct_only_default, _image_series_only
 
     refs = [
         SeriesRef("s", "1", "CT"),
         SeriesRef("s", "2", "SEG"),
         SeriesRef("s", "3", "SR"),
         SeriesRef("s", "4", "MR"),
+        SeriesRef("s", "5", "ct"),  # case-insensitive, the way QIDO returns it
     ]
-    assert [r.series_uid for r in _image_series_only(refs)] == ["1", "4"]
+    assert [r.series_uid for r in _ct_only_default(refs)] == ["1", "5"]
+    assert [r.series_uid for r in _image_series_only(refs)] == ["1", "4", "5"]
+
+    pipeline, pacs = _pipeline(tmp_path)
+    result = pipeline.run_study("1.2.3")
+    reasons = {e.series_uid: e.reason for e in result.exclusions}
+    assert "derived modality" in reasons["1.2.3.2"] or "MR" in reasons["1.2.3.2"]
+
+
+def test_a_refusal_is_a_dictionary_not_a_bare_exception(tmp_path: Path) -> None:
+    """C5: the empty-selection refusal carries a stable code and renders as a dict
+    for the CLI and the bus error mapping."""
+    pipeline, pacs = _pipeline(tmp_path)
+    pacs.list_series = lambda study_uid: [
+        SeriesRef(study_uid, "1.2.3.9", "SEG", "a derived series"),
+    ]
+    with pytest.raises(PipelineError) as excinfo:
+        pipeline.run_study("1.2.3")
+    err = excinfo.value
+    assert err.code == "no_eligible_series"
+    assert err.study_uid == "1.2.3"
+    doc = err.as_dict()
+    assert doc["refused"]["code"] == "no_eligible_series"
+    assert doc["refused"]["study_uid"] == "1.2.3"
+    assert "derived modality" in doc["refused"]["detail"]

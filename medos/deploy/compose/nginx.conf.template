@@ -66,6 +66,20 @@ map $http_authorization $medos_api_authorization {
   ""        "${MEDOS_API_VIEWER_AUTHORIZATION}";
 }
 
+# -------------------------------------------------------------------------------------
+# THE UPLOAD CREDENTIAL, chosen by METHOD (U4). Reads keep the read-only viewer key —
+# a leaked reader credential must never alter the archive, which is what the scope
+# ceiling is FOR. WRITES (STOW-RS POST) carry ${MEDOS_GATEWAY_UPLOADER_KEY}: a principal
+# holding study.write, minted for this surface by the deployment. UNSET BY DEFAULT in
+# the template: POST then expands to "Bearer " and the Gateway answers 401, which is
+# the correct answer for a deployment that has not decided uploads are allowed — the
+# compose stack sets the laptop stand-in explicitly, with a comment saying it is one.
+# =====================================================================================
+map $request_method $dicomweb_authorization {
+  default   "Bearer ${MEDOS_GATEWAY_VIEWER_KEY}";
+  POST      "Bearer ${MEDOS_GATEWAY_UPLOADER_KEY}";
+}
+
 server {
   listen 80 default_server;
   listen [::]:80 default_server;
@@ -315,16 +329,17 @@ server {
     proxy_pass         http://$medos_gw:8043$request_uri;
     proxy_http_version 1.1;
 
-    # The viewer's Gateway token, injected HERE and never served to the browser.
-    # MOS-DATA-017 names the header and the scheme. `$viewer_key` comes from the
-    # environment via the entrypoint's envsubst -- see the header of this file.
+    # The reader's credential: the viewer's read-only Gateway key for reads; the
+    # uploader key (map above, POST only) for STOW-RS writes. MOS-DATA-017 names the
+    # header and the scheme. `$viewer_key` comes from the environment via the
+    # entrypoint's envsubst -- see the header of this file.
     #
     # This is the laptop stack's stand-in for an authenticated clinician. A real
     # deployment puts an OIDC token from the user's own session here, which is the whole
     # reason MOS-DATA-022's audit row has an `actor` and an `on_behalf_of`: with a shared
     # viewer key, every clinical_viewer access is attributed to `user:ohif-viewer` and the
     # per-patient trail cannot say WHICH clinician looked. REPORTED.
-    proxy_set_header   Authorization "Bearer ${MEDOS_GATEWAY_VIEWER_KEY}";
+    proxy_set_header   Authorization $dicomweb_authorization;
 
     proxy_set_header   Host $host;
     proxy_set_header   X-Real-IP $remote_addr;
