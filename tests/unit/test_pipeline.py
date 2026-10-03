@@ -53,8 +53,10 @@ class FakePacs:
         self.fetched.append(series_uid)
         return files
 
-    def store(self, files: Sequence[Path], study_uid: str) -> None:  # pragma: no cover
-        raise NotImplementedError
+    stored_study: str = ""
+
+    def store(self, files: Sequence[Path], study_uid: str) -> None:
+        self.stored_study = study_uid
 
 
 def _card_root(tmp_path: Path) -> Path:
@@ -170,3 +172,43 @@ def test_keep_work_dir_leaves_the_fetched_instances_for_inspection(
 
     assert result.work_dir is not None
     assert list((result.work_dir / "1.2.3.1").glob("*.dcm"))
+
+
+class FakeWriter:
+    """Writes one result file; proves the write -> store -> record loop."""
+
+    def __init__(self, pacs: FakePacs) -> None:
+        self.pacs = pacs
+        self.seen: list[str] = []
+
+    def write(self, result, *, into):
+        into.mkdir(parents=True, exist_ok=True)
+        path = into / "result.dcm"
+        path.write_bytes(b"seg-or-sr bytes")
+        self.seen.append(result.task.study_uid)
+        return [path]
+
+
+def test_a_writer_closes_the_loop_write_store_record(tmp_path: Path) -> None:
+    pipeline, pacs = _pipeline(tmp_path)
+    pipeline.writer = FakeWriter(pacs)
+
+    result = pipeline.run_study("1.2.3")
+
+    assert len(result.stored) == 1
+    assert pacs.stored_study == "1.2.3"
+    assert result.stored[0].is_file()  # work dir kept because results were stored
+    assert result.work_dir is not None
+
+
+def test_the_default_selector_skips_derived_series(tmp_path: Path) -> None:
+    from medos.sdk.pipeline import _image_series_only
+    from medos.sdk.adapters.pacs import SeriesRef
+
+    refs = [
+        SeriesRef("s", "1", "CT"),
+        SeriesRef("s", "2", "SEG"),
+        SeriesRef("s", "3", "SR"),
+        SeriesRef("s", "4", "MR"),
+    ]
+    assert [r.series_uid for r in _image_series_only(refs)] == ["1", "4"]

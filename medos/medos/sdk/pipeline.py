@@ -122,6 +122,19 @@ def _default_volume_builder() -> VolumeBuilder:
     return build_canonical_volume
 
 
+def _image_series_only(refs: Sequence[SeriesRef]) -> Sequence[SeriesRef]:
+    """Default selector: image modalities only, never the archive's derived objects.
+
+    Derived modalities (SEG, SR, RTSTRUCT, ...) are results, not input; fetching
+    them into a model run is how a pipeline would read its own output. Anything
+    not recognized as derived is treated as image -- a novel modality runs rather
+    than being silently skipped, and the refusal when NOTHING remains still names
+    the study.
+    """
+    derived = {"SEG", "SR", "RTSTRUCT", "RTPLAN", "RTDOSE", "PR", "KO", "SC"}
+    return [r for r in refs if r.modality.upper() not in derived]
+
+
 class Pipeline:
     """`card` + `pacs` + `inference`, run against studies.
 
@@ -144,7 +157,12 @@ class Pipeline:
         self.card = card
         self.pacs = pacs
         self.inference = inference
-        self.select_series = select_series or (lambda refs: refs)
+        # THE DEFAULT SELECTOR KEEPS IMAGE SERIES ONLY. MEASURED on the live E2E of
+        # 2026-10-02: a study that already carries results lists its SEG/SR series
+        # too, and a pipeline that fetches them runs the model on its own outputs.
+        # A deployment narrows further (CT only, axial, largest) the way the
+        # platform's selectors do.
+        self.select_series = select_series or _image_series_only
         self.volume_builder = volume_builder or _default_volume_builder()
         self.writer = writer
         self.keep_work_dir = keep_work_dir
