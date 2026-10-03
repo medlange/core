@@ -77,19 +77,20 @@ MODULES = {
 PURE_CORE = (
     "medos.core.geometry", "medos.core.dicomio", "medos.core.errors",
     "medos.core.masks", "medos.core.measure", "medos.core.uids",
-    "medos.core.concepts",
+    "medos.core.concepts", "medos.core.bundle",
 )
 
-#: What `adapters/` may reach beyond PURE_CORE: the platform's DICOMweb client and its
-#: KServe v2 inference driver, both lazily so the base SDK install needs neither
-#: `requests` nor a running server.
-ADAPTER_ALLOWED = ("medos.dicomweb", "medos.inference")
+#: What `adapters/` may reach beyond PURE_CORE: the platform's DICOMweb client, its
+#: KServe v2 inference driver, and its ONE DICOM writer -- all lazily so the base SDK
+#: install needs neither `requests` nor a running server. `results.py` is the
+#: ResultWriter driver: it writes through `medos.writer`, never beside it.
+ADAPTER_ALLOWED = ("medos.dicomweb", "medos.inference", "medos.writer", "medos.capabilities")
 
 #: Subpackages of the SDK and the modules each one holds. `bus` is the messaging
-#: adapter (Kafka/RabbitMQ drivers + the schema-flexible codec); the gate fails closed
-#: either way.
+#: adapter (Kafka/RabbitMQ drivers + the schema-flexible codec); `results` is the
+#: ResultWriter driver over the platform's writer. The gate fails closed either way.
 SUBPACKAGES: dict[str, frozenset[str]] = {
-    "adapters": frozenset({"__init__", "pacs", "inference", "bus"}),
+    "adapters": frozenset({"__init__", "pacs", "inference", "bus", "results"}),
 }
 
 FORBIDDEN = ("psycopg", "fastapi", "starlette", "torch", "monai")

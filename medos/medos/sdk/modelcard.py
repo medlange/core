@@ -14,6 +14,15 @@ The card is the contract the SDK and the trainer meet on WITHOUT meeting:
   * the SDK reads it with `ModelCard.load(directory)` and hands the caller a parsed,
     validated card whose `chain()` is the preprocessing pipeline to run before inference.
 
+    `outputs` descriptors, as written today:
+      `{"kind": "segmentation", "value": int, "name": str}` -- a value of the model's
+        label map. For the result-writer driver (`medos.sdk.adapters.results`), add
+        `"structure"`: the structure slug the platform's concept dictionary resolves to
+        a coded concept (`MOS-IMG-112`: codes come from the dictionary, never invented).
+      `{"kind": "measurement", "name": str, "unit": str?, "from": str}` -- a named
+        metric. For the writer driver, add `"concept_key"`: the key into the platform's
+        concept dictionary for the measurement's coded name.
+
 `format` is pinned to exactly `medlange.modelcard/1`. A card that names another format
 is refused rather than guessed at, because the fields below are promises about bytes
 (weights paths, spec digests) and a guessed reader is how a promise about bytes stops

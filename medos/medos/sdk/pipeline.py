@@ -81,6 +81,9 @@ class PipelineResult:
     process_started_at: datetime | None = None
     process_finished_at: datetime | None = None
     stored: tuple[Path, ...] = ()
+    source_files: tuple[Path, ...] = ()
+    source_geometry: Any = field(default=None, repr=False)
+    card: Any = field(default=None, repr=False)
     work_dir: Path | None = field(default=None, repr=False)
 
     @property
@@ -197,7 +200,7 @@ class Pipeline:
         download_finished = _utcnow()
 
         process_started = _utcnow()
-        volume, _geometry, _info = self.volume_builder(fetched)
+        volume, source_geometry, _info = self.volume_builder(fetched)
         from medos.sdk.preprocess import from_canonical_volume  # noqa: PLC0415
 
         prepared = from_canonical_volume(volume)
@@ -221,6 +224,9 @@ class Pipeline:
                     download_finished_at=download_finished,
                     process_started_at=process_started,
                     process_finished_at=process_finished,
+                    source_files=tuple(fetched),
+                    source_geometry=source_geometry,
+                    card=self.card,
                     work_dir=work_dir,
                 ),
                 into=results_dir,
@@ -254,5 +260,8 @@ class Pipeline:
             process_started_at=process_started,
             process_finished_at=process_finished,
             stored=stored,
+            source_files=tuple(fetched),
+            source_geometry=source_geometry,
+            card=self.card,
             work_dir=kept_work_dir,
         )
