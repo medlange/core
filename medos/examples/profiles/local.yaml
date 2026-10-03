@@ -1,0 +1,32 @@
+# Medlange Core — пример профиля локального развёртывания (mode: local).
+#
+# Что делает: берёт перечисленные исследования из PACS, гоняет через модель,
+# результаты (SEG/SR) кладёт обратно в архив через платформенный writer.
+# Значения ниже — дефолты compose-стека на localhost; подставьте свои.
+version: 1
+
+# Каталог с modelcard.json (карточка тренера) или строка 'selftest' для дымовой
+# прогонки SDK без модели.
+card: selftest
+
+pacs:
+  kind: dicomweb
+  base_url: "http://127.0.0.1:8043/dicomweb/00000000-0000-0000-0000-000000000000"
+  token: "medos-dev-worker-key"
+
+inference:
+  kind: kserve_v2
+  url: "http://127.0.0.1:8010"        # Triton (профиль inference) или иной KServe v2
+  model_version: null
+
+# Какие серии обрабатывать: image_only (умолчание pipeline) или ct_only.
+select_series: ct_only
+
+writer:
+  kind: platform
+  clinical_use_mode: "RESEARCH_ONLY"
+
+mode: local
+local:
+  studies:
+    - "1.2.276.0.7230010.3.1.2.249089308.7716.1675666133.12999"

@@ -1,0 +1,42 @@
+# Medlange Core — пример профиля внешнего развёртывания в стиле MosMed AI
+# (mode: external): заявка приходит сообщением из Kafka, результат уходит сообщением.
+#
+# Схема топиков/полей — ПРИМЕР внешней системы, не контракт: подставьте словарь
+# своей интеграции (топики inbound/outbound/error и маппинг полей).
+version: 1
+
+card: /srv/medlange/models/lung-segmentation   # каталог с modelcard.json
+
+pacs:
+  kind: dicomweb
+  base_url: "https://pacs.example.org/dicomweb/00000000-0000-0000-0000-000000000000"
+  token_env: MEDOS_PACS_TOKEN                  # секрет — из окружения, не из файла
+
+inference:
+  kind: kserve_v2
+  url: "http://triton:8010"
+
+select_series: ct_only
+
+writer:
+  kind: platform
+
+mode: external
+external:
+  bus:
+    kind: kafka
+    bootstrap_servers: "kafka:9092"
+    group_id: medlange-core
+  inbound:
+    topic: KAFKA-MESSAGE
+    fields:
+      study_uid: studyInstanceUid
+      task_id: messageId
+  outbound:
+    topic: DICOMREPORTNOTIFY
+    template:
+      type: DICOMREPORTNOTIFY
+  error:
+    topic: PUMCONSUMERERROR
+    template:
+      type: PUMCONSUMERERROR

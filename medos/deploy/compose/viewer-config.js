@@ -45,4 +45,8 @@ window.VIEWER_CONFIG = {
   // platform it serves.
   surfaceHeader: 'X-MedicalOS-Surface',
   surface: 'clinical_viewer',
+  // WHAT THE ANALYZE DIALOG OFFERS. The same configured list the MedicalOS panel
+  // renders; the viewer asks the API for nothing it was not configured to offer
+  // (MOS-UI-366's list is a configuration, not a discovery).
+  capabilities: ['lung_segmentation', 'emphysema_laa'],
 };

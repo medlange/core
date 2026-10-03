@@ -350,6 +350,71 @@ class JobCreateResponse(BaseModel):
     state: str
 
 
+class CapabilityDescriptor(BaseModel):
+    """One row of `GET /api/v1/capabilities`: identity plus the dependency edges.
+
+    `depends_on` is the capability's OWN declaration (`medos.capabilities.base.Capability`),
+    the same field `medos.worker.steps.resolve_capability_order` reads to build the step
+    order. A client that submits jobs (the viewer's analyze dialog is the in-tree one)
+    needs the edge set to request a dependency closure: CONTRACT.md section 7 makes
+    `emphysema_laa` require `lung_segmentation` to be requested in the SAME job, and a
+    client that knows only the id list can only learn that by submitting a job that fails
+    `capability_resolution_failed`. Measured 2026-10-03 through exactly that failure.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    capability_id: str
+    depends_on: list[str]
+
+
+class CapabilitiesResponse(BaseModel):
+    """The deployment's capability set, in stable (sorted) order."""
+
+    capabilities: list[CapabilityDescriptor]
+
+
+# =====================================================================================
+# GET /api/v1/capabilities
+# =====================================================================================
+@router.get(
+    "/capabilities",
+    response_model=CapabilitiesResponse,
+    summary="Capability descriptors served by this deployment",
+)
+def list_capabilities(request: Request) -> Any:
+    """What this deployment runs and what each entry needs requested beside it.
+
+    THE SAME RESOLVER EVERYWHERE. `known_capability_ids()` (above) exists so `POST /jobs`
+    admits exactly what the worker serves; this route is that answer plus the dependency
+    edges, read from the same `capability_providers.resolve()` call. Reading
+    `app.state.medos_capabilities` instead would hand back a copy frozen at startup, and
+    the startup comment in `medos.api.app` says why the routes do not do that.
+
+    WHY A CLIENT NEEDS THE EDGES, NOT JUST THE IDS. `resolve_capability_order` refuses a
+    job that requests `emphysema_laa` without `lung_segmentation` -- pulling the dependency
+    in silently would write a SEG and a results row the caller never asked for, and
+    `jobs.capability_ids` would disagree with the `results` table. The refusal is correct
+    server-side; the defect was that no surface told a client the edge existed, so the
+    analyze dialog offered `emphysema_laa` as a standalone choice and every such job FAILED.
+    This endpoint is the surface telling them.
+    """
+    denied = require(request, "job.read")
+    if denied is not None:
+        return denied
+
+    registry = capability_providers.resolve().registry
+    return CapabilitiesResponse(
+        capabilities=[
+            CapabilityDescriptor(
+                capability_id=capability_id,
+                depends_on=sorted(getattr(capability, "depends_on", ()) or ()),
+            )
+            for capability_id, capability in sorted(registry.items())
+        ]
+    )
+
+
 # =====================================================================================
 # POST /api/v1/jobs
 # =====================================================================================

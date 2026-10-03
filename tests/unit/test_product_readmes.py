@@ -46,6 +46,8 @@ ROOT = Path(__file__).resolve().parents[2]
 #: product directory -> its README
 READMES: dict[str, Path] = {
     "medos": ROOT / "medos" / "README.md",
+    "viewer": ROOT / "viewer" / "README.md",
+    "trainer": ROOT / "trainer" / "README.md",
     # The SDK README moved with the package: `medicalos_preprocessing/README.md` became
     # `medos/medos/sdk/README.md` when the contracts moved inside the distribution.
     "medos.sdk": ROOT / "medos" / "medos" / "sdk" / "README.md",
@@ -82,7 +84,7 @@ NAMED_TO_SAY_IT_DOES_NOT_EXIST: dict[str, str] = {
 #: medos.sdk/README.md's "Who imports it" table. Exact, not toleranced: the
 #: numbers carry an argument ("35 modules were repointed at it"), and a new importer is a
 #: one-line README edit. Same treatment the register size gets in test_compose_profiles.py.
-IMPORTER_COUNTS: dict[str, int] = {"medos/medos": 35}
+IMPORTER_COUNTS: dict[str, int] = {"medos/medos": 35, "trainer/medos_trainer": 6}
 
 #: medos/README.md's package table states a line count per subpackage. TOLERANCED at 10%,
 #: and MOS-TEST-003 requires a tolerance to be named rather than implied: an exact assertion
@@ -378,6 +380,18 @@ def _viewer_shipped() -> tuple[int, int]:
     return len(ship), lines
 
 
+def test_the_viewer_ships_the_number_of_files_its_readme_states() -> None:
+    files, _ = _viewer_shipped()
+    stated = re.search(r"(\d+) files, ~", _text(READMES["viewer"]))
+    assert stated, "viewer/README.md no longer states a shipped-file count"
+    assert int(stated.group(1)) == files == VIEWER_SHIPPED_FILES, (
+        f"viewer/README.md says {stated.group(1)} shipped files, this module was written "
+        f"against {VIEWER_SHIPPED_FILES}, and {files} are tracked under viewer/ outside "
+        "its suite and its README. This count carries the IEC 62304 8.1.2 argument in "
+        "docs/adr/BUILD_VS_ADOPT.md -- characterisation cost scales with what ships -- so "
+        "it is exact rather than approximate. Update the README in the change that adds "
+        "or removes the file."
+    )
 
 
 def test_the_viewer_line_figure_is_within_its_stated_tolerance() -> None:

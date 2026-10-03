@@ -46,7 +46,7 @@ coverage:
   # narrative totals the single registry used to carry moved to routes.train.yaml with
   # the rows they describe: splitting a narrative count across two files would produce
   # two numbers, neither of which answers the question it was written for.
-  served_entries: 29
+  served_entries: 30
   reserved_entries: 0
   routes_served_by_core_without_an_entry: 0
 
@@ -363,6 +363,21 @@ routes:
       "200":
         schema: Principal
     problems: [unauthenticated]
+
+  - operation_id: listCapabilities
+    method: GET
+    path: /capabilities
+    summary: Capability descriptors served by this deployment, with dependency edges
+    permission: job.read
+    enforced_in_code: true
+    idempotency: not_applicable
+    status: served
+    table_row: null
+    defined_by: CONTRACT.md section 7
+    responses:
+      "200":
+        schema: CapabilitiesResponse
+    problems: [cross-tenant-denied]
 
   - operation_id: createJob
     method: POST

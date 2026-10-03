@@ -64,7 +64,21 @@
 - **G-C1b ✅ (2026-10-03):** `Pipeline(writer=)` кладёт SEG/SR в архив через единый `medos.writer`
   (схема карточки 1.1 с кодами понятий); e2e внешнего режима без ручных шагов.
 - **G-U1 ✅** сырой ключ креденшела работает из коробки (проверено 200).
-- **G-C2:** карточка обученной модели поднимается на Triton одной командой развёртывания.
+- **G-V2 ✅ (2026-10-03):** `viewer.config.json` — панели/тема/брендинг/роутинг
+  (`?study=` deep link) без пересборки; дефолт шипуется в дереве, деплой монтирует
+  поверх (Medlange-палитра живьём в браузере).
+- **G-C2 ✅ (2026-10-03, с зафиксированным внешним блокером последнего шага):**  `tools/deploy_model.py --modelcard <run> --repo <repo>` — карточка тренера
+  (`medlange.modelcard/1`) → Triton model repository одной командой: ONNX-экспорт
+  (`packaging.onnx_bytes`), digest-проверка, гейты MOS-OPS-071-075 по построению,
+  warmup из golden-фикстуры. Прогон на обученной модели (control-585): реальный
+  Triton 2.51 принял repository/config/manifest, живой инференс артефакта бит-идентичен
+  локальному ORT. Блокер: бэкенд `onnxruntime` для Triton живёт только внутри образа
+  nvcr.io (403 без NGC-логина) — `unable to find backend library for backend
+  'onnxruntime'`. Evidence: `D:/PycharmProjects/e2e-staging/g-c2/EVIDENCE.md`.
+- **G-C3 ✅ (2026-10-03):** `python -m medos.sdk run --profile <yaml>` — YAML-профиль
+  (закрытая схема: card/pacs/inference/writer/mode, секреты из env, отказы словарём
+  профиля) + CLI с batch-дисциплиной; профили `medos/examples/profiles/{local,mosmed}.yaml`;
+  e2e на живом стеке: LCTSC S1-104 из `F:/WorkSpace/PulmoAI` → 1 сегмент, exit 0.
 
 ## Порядок
 

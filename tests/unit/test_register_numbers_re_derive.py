@@ -96,11 +96,20 @@ def _trainer_platform_importers() -> list[str]:
 CLAIMS: tuple[tuple[str, str, int, str, object], ...] = (
     ("132", "DICOM probes in tests/_support/", 10, "ten `*_probe.py` generators",
      lambda: len(_probes())),
-    ("136", "tracked top-level trees", 4, "the four tracked top-level trees",
+    ("132", "probes cited in viewer/tests/test_architecture.py", 8,
+     "Eight are cited only in",
+     lambda: len([
+         p for p in _probes()
+         if p.name in (ROOT / "viewer" / "tests" / "test_architecture.py").read_text(
+             encoding="utf-8")
+     ])),
+    ("136", "tracked top-level trees", 6, "the six tracked top-level trees",
      lambda: len(_trees())),
     ("139", "extension files citing the withdrawn MOS-UI-012", 4,
      "**four** source files cite them",
      lambda: len(_extension_files_citing_withdrawn())),
+    ("137", "trainer modules importing the platform", 1,
+     "**exactly one** of them", lambda: len(_trainer_platform_importers())),
 )
 
 

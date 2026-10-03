@@ -52,7 +52,7 @@ def test_no_source_file_holds_a_control_byte_from_a_mangled_escape() -> None:
     # and naming them individually would leave `medos/api`, `medos/schemas`,
     # `medos/services` and `medos/examples` unscanned -- four roots nobody decided to
     # exclude, which is how a scan comes to cover less than its name says.
-    roots = [root_dir / "tests",
+    roots = [root_dir / "viewer", root_dir / "trainer", root_dir / "tests",
              root_dir / "medos", root_dir / "medos" / "medos" / "sdk"]
     missing = [str(r.name) for r in roots if not r.exists()]
     assert not missing, (

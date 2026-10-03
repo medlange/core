@@ -666,7 +666,7 @@ services:
   # medos-train-api: the MODEL-PREPARATION service, and the second of the two products.
   #
   # `medos-api` above runs `medos.api.app:create_app` -- the PACS-and-models service. It
-  # serves 25 route paths and its import closure does not reach `medos.training`, which
+  # serves 26 route paths and its import closure does not reach `medos.training`, which
   # `tests/gate/test_core_train_boundary.py` asserts by walking the source rather than
   # by taking anyone's word for it. A site that only SERVES models runs that and nothing
   # else, and cannot prepare one even by accident.
@@ -674,7 +674,7 @@ services:
   # This runs `medos.api.training_plane:create_training_app`: the SAME application plus
   # two routers -- harvesting, curation, dataset versions, splits, annotation sets,
   # training runs, configuration searches, conversion runs. Chapter 10 table 10.2-B rows
-  # R6-R31. 52 route paths, a strict superset of Core's 25.
+  # R6-R31. 53 route paths, a strict superset of Core's 26.
   #
   # SUPERSET, NOT FORK, and the gate asserts that too: the moment Core serves a path
   # this does not, the two have begun to diverge and the cheap split has stopped being
@@ -691,7 +691,7 @@ services:
     # built from the Dockerfile's `core` target, which DELETES `medos/medos/training` and the
     # two routers and then proves in the image that the app still builds without them.
     # This service needs those files, so it is built from the `train` target, where they
-    # are present. 52 route paths against Core's 25.
+    # are present. 53 route paths against Core's 26.
     image: medicalos/medos-train:0.1.0.dev0
     build:
       context: ../../..
@@ -1059,6 +1059,11 @@ services:
       # and sends no surface header; with it, it is the MedicalOS clinician viewer.
       # See the file's own header for what each field buys.
       - ./viewer-config.js:/usr/share/nginx/html/mos-viewer/viewer-config.js:ro
+      # THE PRESENTATION LAYER, the same mount mechanism one file up: branding (logo
+      # glyph), theme (CSS custom-property overrides in the Medlange palette), panel
+      # enablement and the ?study= deep-link gate. The viewer ships a default
+      # viewer.config.json in its own tree; this file replaces it without a rebuild.
+      - ./viewer.config.json:/usr/share/nginx/html/mos-viewer/viewer.config.json:ro
       # Renders nginx.conf.template with the viewer's Gateway token, then execs nginx.
       # NOTHING ELSE RENDERS IT: `nginx:1.27-alpine` templates /etc/nginx/templates and
       # this one is mounted at /usr/src. Drop the `command:` below and the container comes

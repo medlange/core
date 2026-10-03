@@ -255,7 +255,28 @@ server {
   }
 
   # --- MedicalOS control plane -------------------------------------------------------
-  # POST /api/v1/jobs, GET /api/v1/jobs/{id}, GET /api/v1/jobs/{id}/events.
+  # POST /api/v1/jobs, GET /api/v1/jobs/{id}, GET /api/v1/jobs/{id}/events, and
+  # GET /api/v1/capabilities -- the last added by Core as the dependency-edge surface the
+  # viewer's analyze dialog builds its closure from (CONTRACT.md section 7).
+  #
+  # THE EXACT MATCH EXISTS BECAUSE OF THE TRAINING REGEX BELOW. That regex's alternation
+  # lists `capabilities` for the Train plane's `/capabilities/{id}/seed-variance`
+  # (routes_training.py), and a regex location beats the `/api/` prefix -- so without this
+  # line the bare Core path `/api/v1/capabilities` matched the regex, was proxied to
+  # `medos-train-api`, and 502'd on every default `up` where the training profile is off.
+  # Measured 2026-10-03. An exact location is checked BEFORE any regex, so this one
+  # reclaims the bare path while `/capabilities/...` deeper paths keep going to Train.
+  location = /api/v1/capabilities {
+    set $medos_api medos-api;
+    proxy_pass         http://$medos_api:8000$request_uri;
+    proxy_http_version 1.1;
+    proxy_set_header   Authorization $medos_api_authorization;
+    proxy_set_header   Host $host;
+    proxy_set_header   X-Real-IP $remote_addr;
+    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+  }
+
   location /api/ {
     set $medos_api medos-api;
     proxy_pass         http://$medos_api:8000$request_uri;

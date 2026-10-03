@@ -76,6 +76,10 @@ schemas:
 schemas_pending:
   - ArtifactStatusRequest
   - Attestation
+  # `GET /capabilities` responds with this and no file has been written for it yet;
+  # listed here for the reason `Principal` below states -- the index and the pending
+  # list together account for every name the registry uses.
+  - CapabilitiesResponse
   - EventEnvelope
   - Job
   - JobCreateRequest

@@ -70,6 +70,14 @@ WATCHED_BY: dict[str, tuple[str, ...]] = {
         "tests/unit/test_suite_layout.py",
         "tests/unit/test_gate_contract.py",
     ),
+    "trainer": (
+        "tests/unit/test_trainer_import_boundary.py",
+        "tests/unit/test_declared_dependencies.py",
+    ),
+    "viewer": (
+        "tests/unit/test_viewer_deployment.py",
+        "tests/unit/test_viewer_cache_policy.py",
+    ),
 }
 
 

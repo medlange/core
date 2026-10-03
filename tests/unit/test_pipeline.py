@@ -202,8 +202,8 @@ def test_a_writer_closes_the_loop_write_store_record(tmp_path: Path) -> None:
 
 
 def test_the_default_selector_skips_derived_series(tmp_path: Path) -> None:
-    from medos.sdk.pipeline import _image_series_only
     from medos.sdk.adapters.pacs import SeriesRef
+    from medos.sdk.pipeline import _image_series_only
 
     refs = [
         SeriesRef("s", "1", "CT"),

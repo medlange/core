@@ -8,10 +8,10 @@ MedicalOS ships as two deployables:
   * **Core** -- `medos.api.app:create_app`. The PACS-and-models service: DICOM in and
     out through the credentialed gateway, jobs, capabilities, the service and model
     registries, results and reviews. It cannot train and does not carry the code that
-    could. 25 route paths.
+    could. 26 route paths.
   * **Train** -- `create_training_app` below. Core plus the model-preparation surface:
     cohort harvesting, curation, dataset versions, splits, annotation sets, training
-    runs, configuration searches and conversion runs. 52 route paths.
+    runs, configuration searches and conversion runs. 53 route paths.
 
 Train is Core plus routers. Core is not Train minus anything: it is the whole of what a
 site that only SERVES models needs, and the fact that it is also a strict subset is what

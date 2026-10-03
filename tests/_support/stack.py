@@ -793,7 +793,7 @@ UNCOVERED: dict[str, str] = {
         "behind `profiles: [training]`, so it is ABSENT from a default `up` and a probe "
         "for it would fail on every correct deployment of the PACS-and-models service. "
         "It serves a strict SUPERSET of `medos-api`'s routes, so nothing it offers is "
-        "unprobed -- what `medos-api`'s probe establishes about the shared 25 paths is "
+        "unprobed -- what `medos-api`'s probe establishes about the shared 26 paths is "
         "established about this process too, and the 27 it adds are covered by "
         "`tests/integration/test_api_training.py` and `test_api_curation*.py`, which "
         "drive the routers directly. `tests/gate/test_core_train_boundary.py` asserts "
@@ -845,6 +845,7 @@ SUITE_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     # and FAILS when the pin is absent, because a gate that skips when its dependency is
     # missing is not a gate. The suite is kept out of the default run by selection
     # (`-m trainer_internals`, its own CI job), never by skipping.
+    "trainer/tests": (),
     # The default for the integration suite: Postgres only.
     "tests/integration": ("postgres",),
     # `orthanc-rest` and `docker` because `_delete_study`'s teardown now runs

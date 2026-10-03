@@ -145,6 +145,7 @@ from a checkout, with `pip install -e ".[dev,tools]"`.
 | | |
 |---|---|
 | `medos/tools/publish_model.py` | Chapter 6's packaging step in miniature. `build` / `publish` / `verify` are separate subcommands on purpose: `MOS-OPS-070` puts `medicalos.json` production in packaging and `MOS-OPS-071` requires the serving platform to be unable to perform it, so a deployment must be able to publish artifacts it did not build. `build` needs `onnx`; the other two need only the pinned runtime set. |
+| `medos/tools/deploy_model.py` | The G-C2 command: a trainer run's `modelcard.json` → a §13.10.1 Triton model directory (`--modelcard <run> --repo <repo>`). Refuses a TorchScript-only card, a digest mismatch, or a golden fixture that disagrees with the card — the normative serving artifact is ONNX and the server must not convert (`MOS-OPS-071`). Writes through `medos.inference.repository`, so the refusal gates are satisfied by construction. |
 | `medos/tools/medicalos_verify.py` | `medicalos-verify` — checks a ValidationReport bundle **with no MedicalOS in sight**, which is the whole point: chapter 7 §7.12.3 requires a reader to be able to verify a report without trusting the platform that wrote it. Seven numbered steps to a `VERDICT`, and it says out loud that revocation status is NOT checked offline. `MOS-EVID-124` forbids a socket anywhere in its import closure. |
 
 ### Reading what the platform actually did
@@ -189,8 +190,8 @@ you choose between them.
 
 | | |
 |---|---|
-| **Core** — `medos-api`, image `medicalos/medos` | The PACS-and-models service. DICOM in and out through the credentialed gateway, jobs, capabilities, the service and model registries, results, reviews. **25 `/api/v1` paths.** |
-| **Train** — `medos-train-api`, image `medicalos/medos-train` | Core plus model preparation: harvesting, curation, dataset versions, splits, annotation sets, training runs, configuration searches, conversion runs. **52 `/api/v1` paths**, a strict superset. |
+| **Core** — `medos-api`, image `medicalos/medos` | The PACS-and-models service. DICOM in and out through the credentialed gateway, jobs, capabilities, the service and model registries, results, reviews. **26 `/api/v1` paths.** |
+| **Train** — `medos-train-api`, image `medicalos/medos-train` | Core plus model preparation: harvesting, curation, dataset versions, splits, annotation sets, training runs, configuration searches, conversion runs. **53 `/api/v1` paths**, a strict superset. |
 
 Train is Core plus two routers, composed at build time by
 `medos.api.training_plane:create_training_app`. There is no `MEDOS_ENABLE_TRAINING`:

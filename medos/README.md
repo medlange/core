@@ -7,8 +7,8 @@ It is the third of this repository's three products, and the only one that is no
 
 | | what it is | its tests |
 |---|---|---|
-| [the Medlange Viewer repository](../viewer/README.md) | a standalone DICOMweb viewer | the Viewer repository's suite — reads the Viewer repository, nothing else |
-| [the Medlange Trainer repository](../trainer/README.md) | a standalone model fitter | the Trainer repository's suite — reads the Trainer repository, nothing else |
+| [`../viewer/`](../viewer/README.md) | a standalone DICOMweb viewer | `viewer/tests/` — reads `viewer/`, nothing else |
+| [`../trainer/`](../trainer/README.md) | a standalone model fitter | `trainer/tests/` — reads `trainer/`, nothing else |
 | **`medos/medos/`** | **the platform that hosts both** | **`../tests/`, and that is deliberate — see below** |
 
 ---
@@ -24,9 +24,9 @@ where it can see them all, which is the repository root.
 
 Measured on 2026-09-26, as a snapshot and not a claim about tomorrow: of 54 modules in
 `tests/unit/`, **13 read only `medos/medos/`, 39 read something else** and 2 read
-neither — the specification (16), the compose file (15), the Trainer repository (12),
+neither — the specification (16), the compose file (15), `trainer/` (12),
 `medos/deploy/` (11), the register (11), the release records (9), the training console
-and the OHIF extension (7), the Viewer repository (7), the nginx template (4); a module can appear
+and the OHIF extension (7), `viewer/` (7), the nginx template (4); a module can appear
 in several. The sentence here used to read "of the 38 modules … 11 … Twenty-seven",
 whose arithmetic was self-consistent and whose population had moved; register entry 138
 records what it said and why nothing noticed. Not because they are badly scoped, but because *integrating those things is
@@ -73,7 +73,7 @@ api/            the HTTP surface (FastAPI, thin; MOS-API-008 validation)   8 738
 evidence/       manifests, leakage, validation reports, DSSE signatures   10 901
 training/       cohorts, policy, splits, run records, the seal, the supervisor  9 401
 db/             psycopg 3, written-out SQL, RLS tenancy, the job queue     4 521
-sdk/            the SDK: cards, pipeline, adapters, canonical digests       5 839
+sdk/            the SDK: cards, pipeline, adapters, profiles, canonical digests  6 664
 safety/         the envelope every AI-derived finding is wrapped in        3 874
 inference/      drivers and the serving path                               3 606
 gateway/        the DICOM Gateway's Python side                            3 345
@@ -103,7 +103,7 @@ config/         dev-mode refusals                                            211
   the SDK. The trainer imports it without importing the rest of this platform.
 - **torch, MONAI, nnU-Net.** `MOS-TRAIN-225` forbids the nnU-Net planner from this image's
   import closure *by name*. `medos/medos/sdk/chain.py` generates MONAI Bundle
-  configs as *data* and never imports MONAI. the Trainer repository's boundary suite
+  configs as *data* and never imports MONAI. `tests/integration/test_trainer_boundary.py`
   holds the line.
 
 ## Running its tests
@@ -122,6 +122,6 @@ suite declares.
 
 `../docs/spec/99-known-inconsistencies.md` records 153 places where this repository does
 not yet meet its own specification, each with what it costs and what would resolve it.
-Two of them — entries 111 and 112 — are executable: the Trainer repository's contract suite
+Two of them — entries 111 and 112 — are executable: `tests/unit/test_trainer_platform_contract.py`
 holds them as strict `xfail`s, so the day either is fixed the suite goes red and the entry
 has to be closed.

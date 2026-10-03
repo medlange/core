@@ -127,7 +127,7 @@ def test_the_document_still_describes_the_real_routes(document: dict[str, Any]) 
     assertion above would pass over `{}`.
 
     THE FLOOR WAS 40 AND IS NOW 20, because this fixture builds CORE. `create_app` is
-    the PACS-and-models service and serves 25 paths; the model-preparation service adds
+    the PACS-and-models service and serves 26 paths; the model-preparation service adds
     27 more on top. Lowering a threshold is usually how a check stops checking, so the
     companion assertion below pins the split itself rather than trusting this number.
     """

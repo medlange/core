@@ -76,6 +76,7 @@ SCANNED: tuple[str, ...] = ("medos/medos", "medos/tools", "tests/_support",
 FIRST_PARTY: frozenset[str] = frozenset(
     {
         "medos",
+        "medos_trainer",
         # `MOS-IMG-003`'s package. First-party and in this repository: it is declared in
         # `[tool.setuptools.packages.find]` beside `medos*` and installed from the tree,
         # not from an index, so an unguarded import of it is not an undeclared dependency.
@@ -102,6 +103,7 @@ FIRST_PARTY: frozenset[str] = frozenset(
 IMPORT_NAME: dict[str, str] = {
     "pynrrd": "nrrd",
     "argon2-cffi": "argon2",
+    "pyyaml": "yaml",
 }
 
 #: Modules that must NOT appear under `medos/medos/` at all. The value is the reason, and the
@@ -333,6 +335,13 @@ def test_the_platform_does_not_import_the_training_backend(module: str) -> None:
     )
 
 
+def test_the_trainer_package_does_import_it_so_the_previous_test_can_fail() -> None:
+    """If `torch` were absent from the whole repository the platform test above would
+    pass for the wrong reason. It is in `trainer/`, which is the point: the
+    dependency exists and is on the other side of the boundary."""
+    hits = scan(_sources("trainer"))
+    assert hits.get("torch"), "trainer/ no longer imports torch; has it moved?"
+    assert hits.get("nnunetv2"), "trainer/ no longer imports nnunetv2; has it moved?"
 
 
 # --------------------------------------------------------------------------------------

@@ -37,22 +37,26 @@ beside it at the root. That tree no longer exists, and a section calling itself
 authoritative about a tree that does not exist is worse than no section: it is the first
 place somebody looks.
 
-### This repository's product
+### Three products
 
 ```
-medos/                   the platform AND the SDK (Medlange Core). A PRODUCT DIRECTORY,
-                         not a package -- the package is `medos/medos/` inside it, and the
-                         SDK is that package's `sdk/` subtree (`medos.sdk`): the spec
-                         format, the bundle layout, the phantom, the digest rule and the
+viewer/                  a standalone DICOMweb viewer. No build step, no bundler, no
+                         runtime dependency. Its tests read `viewer/` and nothing else
+                         and run with no repository around them.
+trainer/                 a standalone model fitter. EXACTLY ONE of its modules imports
+                         the platform -- `__main__.py`, whose `execute` branch is the
+                         supervisor calling into `medos/medos/training/supervisor.py`;
+                         everything else in it imports only `medos.sdk`, the SDK.
+medos/                   the platform AND the SDK. A PRODUCT DIRECTORY, not a package --
+                         the package is `medos/medos/` inside it, and the SDK is that
+                         package's `sdk/` subtree (`medos.sdk`): the spec format, the
+                         bundle layout, the phantom, the digest rule and the
                          run-directory exchange. `MOS-IMG-003` requires exactly one
                          implementation of those contracts; both images install it, and
                          it imports neither of them back.
 ```
 
-**This heading said THREE, then FOUR.** The repository used to carry Medlange Viewer and
-Medlange Trainer as trees here; the split moved them to their own repositories
-(`medlange/viewer`, `medlange/trainer`), and this file now describes the Core repository
-alone. The sibling paragraphs below that still name the two extracted trees are history.
+**This heading said FOUR.** The fourth was `medicalos_preprocessing/`, the contracts'
 top-level home; the contracts moved INSIDE the distribution as `medos/medos/sdk/` when
 the platform became the SDK, and the count went with the tree.
 

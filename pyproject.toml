@@ -22,6 +22,11 @@ dependencies = [
     "numpy>=1.26",
     "pydicom>=3.0.1",
     "highdicom>=0.22",
+    # `medos.sdk.profiles`: the deployment profile is YAML because an operator edits it,
+    # and PyYAML is the smallest parser that ships everywhere the SDK runs. The profile
+    # is DATA (a closed schema, `profiles.py`), never code, so this pulls no execution
+    # surface into the SDK closure.
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -199,7 +204,7 @@ exclude = [
 # run from it (`cd viewer && pytest tests`). They must ALSO run here -- a suite that moves
 # out of `testpaths` does not fail, it silently stops being counted, and 214 viewer tests
 # left the default run exactly that way when the tree moved out of `web/`.
-testpaths = ["tests"]
+testpaths = ["tests", "viewer/tests", "trainer/tests"]
 # TWO ENTRIES for the same reason `packages.find` has two roots. `.` makes `tests`,
 # `viewer` and `trainer` importable; `medos` makes `medos` itself importable (it is
 # `medos/medos/`) -- and with it `medos.sdk`, the SDK both the platform and the trainer

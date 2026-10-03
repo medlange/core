@@ -70,6 +70,15 @@ MODULES = {
     # The runtime workers: LocalWorker (locally triggered) and ExternalWorker
     # (bus-driven), the two deployment modes of the same pipeline.
     "runtime",
+    # The deployment profile (roadmap C3): one closed-schema YAML document that names
+    # card/PACS/inference/writer/mode, loaded by `medos.sdk.profiles` and driven by
+    # `python -m medos.sdk run`. Data, not code: the schema is closed and refusals
+    # speak the profile's own vocabulary.
+    "profiles",
+    # The CLI entry point (`python -m medos.sdk run --profile ...`). Thin on purpose:
+    # every decision lives in `profiles.py`, this only walks the studies and prints
+    # JSON lines.
+    "__main__",
 }
 
 #: The pure half of `medos.core` (documented: no I/O to DB or HTTP), which SDK modules may

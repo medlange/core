@@ -70,7 +70,7 @@ MedicalOS ships as two deployables built from one repository.
 
 | | |
 |---|---|
-| **Core** (`medos.api.app:create_app`, image `medicalos/medos`) | The PACS-and-models service: DICOM in and out, jobs, capabilities, registries, results, reviews, and the whole evidence plane. 25 `/api/v1` paths. |
+| **Core** (`medos.api.app:create_app`, image `medicalos/medos`) | The PACS-and-models service: DICOM in and out, jobs, capabilities, registries, results, reviews, and the whole evidence plane. 26 `/api/v1` paths. |
 | **Train** (`medos.api.training_plane:create_training_app`, image `medicalos/medos-train`) | Core plus model preparation: harvesting, curation, dataset versions, splits, annotation sets, training runs, configuration searches, conversion runs. 52 paths. |
 
 **Train is Core plus routers, never a fork.** A gate asserts Core's served set stays a

@@ -28,8 +28,8 @@ result = pipe.run_study("1.2.840.10008.…")           # fetch → preprocess �
 | `medos/medos/sdk/modelcard.py` | the medlange.modelcard/1 card a trainer writes beside its model and the SDK reads to rebuild everything inference needs: the preprocessing spec, weights facts, framework versions, per-model output descriptors, build stamp |
 | `medos/medos/sdk/spec.py`, `chain.py`, `preprocess.py` | the `PreprocessingSpec` format, its chain builder, and the pure-numpy executor — the one implementation of the preprocessing contract (`MOS-TRAIN-034`: the chain builder is the only place a MONAI transform may be *named*) |
 | `medos/medos/sdk/canonical.py` | RFC 8785 canonical JSON + sha256 — the one digest rule both sides compute against |
-| `medos/medos/sdk/bundle.py`, `autoconfig.py` | the MONAI Bundle layout (`configs/inference.json`, `configs/metadata.json`, `configs/preprocessing.json`, `models/model.ts`) and the nnU-Net `plans.json` mapping table |
-| `medos/medos/sdk/fixtures.py` | the phantom and its pinned hashes — how two implementations are compared; the staged training volume's `images/` directory |
+| `medos/medos/sdk/bundle.py`, `autoconfig.py` | the MONAI Bundle layout (`configs/inference.json` and friends) and the nnU-Net `plans.json` mapping table |
+| `medos/medos/sdk/fixtures.py` | the phantom and its pinned hashes — how two implementations are compared |
 | `medos/medos/sdk/contract.py` | the run-directory exchange between platform and trainer |
 | `medos/medos/sdk/pipeline.py` | the serving pipeline: study → fetched series → canonical volume → the card's chain → inference → postprocessed findings, with the download/process timings both deployment modes report |
 | `medos/medos/sdk/postprocess.py` | the declarative per-model postprocessor: segments cut from the label map and measurements lifted from metrics, exactly as the card's `outputs` descriptor promises |
@@ -49,6 +49,19 @@ result = pipe.run_study("1.2.840.10008.…")           # fetch → preprocess �
   mapping profile (`MessageMapping`), and [`medos/examples/bus/mosmed/`](../../../medos/examples/bus/mosmed/profile.yaml)
   is a worked example in the style of an external management system -- yours will differ,
   which is the point.
+
+## Running from a profile (no Python required)
+
+Both modes are also a YAML file plus one command (roadmap C3):
+
+```bash
+python -m medos.sdk run --profile medos/examples/profiles/local.yaml
+python -m medos.sdk run --profile medos/examples/profiles/mosmed.yaml [--once]
+```
+
+The profile (`medos.sdk.profiles`) is a closed-schema document naming the card, the
+PACS, the inference backend, the writer and the mode; refusals speak the profile's own
+vocabulary. `medos/examples/profiles/` carries a local and a mosmed-style example.
 
 ## Installation
 
@@ -76,7 +89,7 @@ image, so a dependency added here is a dependency added to both.
 | | modules |
 |---|---|
 | [`medos/medos/`](../../../medos/README.md) | **35** — `api/routes_training.py`, `api/routes_curation.py`, `core/__init__.py`, `db/audit.py`, nine `evidence/*` and the rest |
-| the Medlange Trainer package ([github.com/medlange/trainer](https://github.com/medlange/trainer)) | **6** — and nothing else from outside itself. That is what makes the trainer installable by somebody with no Medlange platform |
+| [`trainer/medos_trainer/`](../../trainer/README.md) | **6** — and nothing else from outside itself. That is what makes the trainer installable by somebody with no Medlange platform |
 
 Both Docker images install the SDK with the rest of the `medos` distribution.
 

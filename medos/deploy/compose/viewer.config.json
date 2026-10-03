@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "branding": { "logoGlyph": "M" },
+  "theme": {
+    "--accent": "#2ec4b6",
+    "--accent-hi": "#3fd9ca",
+    "--accent-ink": "#c9f2ee",
+    "--accent-fill": "rgba(46, 196, 182, .20)",
+    "--tool-on": "#1b6bd4"
+  },
+  "panels": { "disabled": [] },
+  "routing": { "deepLinkStudy": true }
+}
