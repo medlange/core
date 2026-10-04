@@ -36,6 +36,14 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRAINER_ROOT = REPO_ROOT / "trainer"
+if not (TRAINER_ROOT / "medos_trainer").is_dir():
+    pytest.skip(
+        "the trainer tree is not present in this checkout (core split) -- "
+        "the same gates run in medlange/trainer's own CI",
+        allow_module_level=True,
+    )
+
+
 if str(TRAINER_ROOT) not in sys.path:
     sys.path.insert(0, str(TRAINER_ROOT))
 

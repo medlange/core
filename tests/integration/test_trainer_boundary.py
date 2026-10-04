@@ -40,6 +40,15 @@ import pytest
 from tests._support.roots import REPO_ROOT, child_pythonpath
 from tests._support.skips import skip_infra
 
+_TRAINER_TREE = REPO_ROOT / "trainer"
+if not (_TRAINER_TREE / "requirements.txt").is_file():
+    pytest.skip(
+        "the trainer tree is not present in this checkout (core split) -- "
+        "the same gates run in medlange/trainer's own CI",
+        allow_module_level=True,
+    )
+
+
 #: The distributions that must never appear in the platform image. `nnunetv2` and
 #: `monai` are `MOS-TRAIN-225`'s subject; `torch` is the one that carries both and is the
 #: 2.5 GB that makes the separation worth having.

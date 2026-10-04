@@ -275,7 +275,8 @@ class LocalProcessOrchestrator:
         this class CONSTRUCTS rather than inherits. `base_env` defaults to a five-variable
         set carrying no database URL, no object-store credential and no API key, so a
         training container cannot reach the control plane by reading its own environment.
-    C2  Nothing in `medos/medos/worker`, `medos/medos/api` or `medos/medos/capabilities` imports this module;
+    C2  Nothing in `medos/medos/worker`, `medos/medos/api` or
+        `medos/medos/capabilities` imports this module;
         `tests/integration/test_training_run.py` asserts the import closure rather than
         trusting the sentence.
     C3  This class holds no permission at all: it has no connection, no principal and no

@@ -29,6 +29,14 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRAINER_ROOT = REPO_ROOT / "trainer"
+if not (TRAINER_ROOT / "medos_trainer").is_dir():
+    pytest.skip(
+        "the trainer tree is not present in this checkout (core split) -- "
+        "the same gates run in medlange/trainer's own CI",
+        allow_module_level=True,
+    )
+
+
 if str(TRAINER_ROOT) not in sys.path:
     sys.path.insert(0, str(TRAINER_ROOT))
 
@@ -448,7 +456,7 @@ def test_a_cohort_line_carries_the_channels_the_case_annotates() -> None:
     assert entry.supervises == ("neo", "effusion"), entry.supervises
 
 
-def test_a_cohort_that_says_nothing_about_supervision_is_not_the_same_as_one_that_says_none() -> None:
+def test_a_cohort_that_says_nothing_about_supervision_is_not_the_same_as_none() -> None:
     """`None` and `()` are different answers and the difference decides the run.
 
     `None` is "this cohort does not record supervision", and `stage_dataset` then writes
@@ -469,7 +477,10 @@ def test_a_scalar_supervises_is_refused() -> None:
 
 
 def _entries(*pairs) -> list:
-    return [contract.CohortEntry.from_document(_supervision_line(k, s), where="w") for k, s in pairs]
+    return [
+        contract.CohortEntry.from_document(_supervision_line(k, s), where="w")
+        for k, s in pairs
+    ]
 
 
 def test_stage_dataset_writes_the_map_from_the_cohort(tmp_path) -> None:
@@ -801,7 +812,9 @@ def test_a_phase_writes_both_the_latest_and_its_own_record(tmp_path) -> None:
 
     root = _run_directory(tmp_path / "run", _FULL_SPEC)
     entry._write_result(contract.RunDirectory(str(root)),
-                        contract.success_document("plan", fingerprint_digest="sha256:" + "a" * 64))
+                        contract.success_document(
+                            "plan", fingerprint_digest="sha256:" + "a" * 64
+                        ))
 
     latest = json.loads((root / "result.json").read_text(encoding="utf-8"))
     mine = json.loads((root / "result-plan.json").read_text(encoding="utf-8"))
@@ -817,7 +830,9 @@ def test_the_fit_does_not_erase_the_plans_record(tmp_path) -> None:
 
     root = _run_directory(tmp_path / "run", _FULL_SPEC)
     run = contract.RunDirectory(str(root))
-    entry._write_result(run, contract.success_document("plan", plan_digest="sha256:" + "b" * 64))
+    entry._write_result(
+        run, contract.success_document("plan", plan_digest="sha256:" + "b" * 64)
+    )
     entry._write_result(run, contract.success_document("fit", bundle={"path": "bundle"}))
 
     latest = json.loads((root / "result.json").read_text(encoding="utf-8"))

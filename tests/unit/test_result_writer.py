@@ -15,7 +15,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
 from medos.sdk.adapters.results import (
     WriterRefused,
     _findings,

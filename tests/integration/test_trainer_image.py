@@ -40,6 +40,15 @@ import pytest
 from tests._support.docker_json import last_json_object
 from tests._support.skips import skip_infra
 
+_TRAINER_TREE = Path(__file__).resolve().parents[2] / "trainer"
+if not (_TRAINER_TREE / "requirements.txt").is_file():
+    pytest.skip(
+        "the trainer tree is not present in this checkout (core split) -- "
+        "the same gates run in medlange/trainer's own CI",
+        allow_module_level=True,
+    )
+
+
 IMAGE = "medicalos/trainer:0.3.0.dev0"
 _TIMEOUT = 600
 
