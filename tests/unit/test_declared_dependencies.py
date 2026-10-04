@@ -339,6 +339,8 @@ def test_the_trainer_package_does_import_it_so_the_previous_test_can_fail() -> N
     """If `torch` were absent from the whole repository the platform test above would
     pass for the wrong reason. It is in `trainer/`, which is the point: the
     dependency exists and is on the other side of the boundary."""
+    if not (REPO / "trainer").is_dir():
+        pytest.skip("the trainer tree is not part of a core-split checkout")
     hits = scan(_sources("trainer"))
     assert hits.get("torch"), "trainer/ no longer imports torch; has it moved?"
     assert hits.get("nnunetv2"), "trainer/ no longer imports nnunetv2; has it moved?"

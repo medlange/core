@@ -586,6 +586,12 @@ def test_the_authoritative_layout_counts_what_it_lists() -> None:
 
 
 def test_every_path_the_authoritative_layout_lists_exists() -> None:
+    if not (REPO / "viewer").is_dir():
+        pytest.skip(
+            "CONTRACT.md's layout section lists the sibling product trees, "
+            "which are not part of a core-split checkout",
+            allow_module_level=False,
+        )
     absent: list[str] = []
     for heading, (_, entries) in _contract_layout_sections().items():
         for entry in entries:

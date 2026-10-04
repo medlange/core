@@ -161,6 +161,13 @@ def test_every_documented_file_path_exists() -> None:
                 target = raw.replace("\\", "/").lstrip("./")
                 if not target or target.startswith("$") or "*" in target:
                     continue
+                # Sibling product trees (viewer/, trainer/) are legitimate
+                # documentation targets in the monorepo and absent from a
+                # split checkout; existence of THOSE paths is their own
+                # repos' business, not this gate's.
+                head = target.split("/", 1)[0]
+                if head in ("viewer", "trainer") and not (ROOT / head).is_dir():
+                    continue
                 checked += 1
                 if not (ROOT / target).exists():
                     bad.append(f"{doc.relative_to(ROOT).as_posix()}:{n}  {raw}")
