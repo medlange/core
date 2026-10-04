@@ -16,7 +16,7 @@ jobs:
       # `[dev]` = server extras + pytest/ruff/httpx/nibabel: the SDK closure plus
       # what the unit suite drives. onnx is the packaging tool's dependency --
       # installed so the deploy_model gates actually run instead of skipping.
-      - run: pip install -e ".[dev]" onnx
+      - run: pip install -e ".[dev]" onnx pynrrd
       - run: ruff check medos/medos tests
       # tests/unit holds every unit gate; the trainer-dependent ones skip
       # themselves when the trainer tree is absent (this split's case).
