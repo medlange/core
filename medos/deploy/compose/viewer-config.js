@@ -37,7 +37,7 @@ window.VIEWER_CONFIG = {
   // The name in the tab and the heading. The FOOTER STATEMENT is not here and must
   // not be: it is a required safety marking, and nginx puts it into the delivered
   // bytes so it does not depend on this file having loaded.
-  productName: 'MedicalOS Viewer',
+  productName: 'Medlange Viewer',
   dicomWebRoot: '/dicomweb',
   tenant: '00000000-0000-0000-0000-000000000000',
   // BOTH HALVES, because the viewer holds neither. The name is this platform's and
