@@ -43,6 +43,17 @@ ROOT = Path(__file__).resolve().parents[2]
 #: `docs/README.md` says so in terms.
 SKIP = ("docs/spec/", "docs/releases/")
 
+#: The citation corpus is the MONOREPO's: it names test files across viewer/ and
+#: trainer/, which are not part of a core-split checkout. Their own repos carry
+#: these gates for their own trees.
+if not (ROOT / "viewer").is_dir():
+    import pytest
+
+    pytest.skip(
+        "citation corpus spans the sibling product trees (core split checkout)",
+        allow_module_level=True,
+    )
+
 FILE_CITATION = re.compile(r"`([\w./-]*test_[\w./-]*\.py)`")
 FUNC_CITATION = re.compile(r"`(test_\w+)`")
 
