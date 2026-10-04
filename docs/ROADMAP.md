@@ -108,7 +108,39 @@
 - **T7. Срез старого:** nnunetv2/monai выводятся из requirements и импортов;
   README/CI/доки приводятся к реальности (4 модуля/54 теста → факт).
 
-Порядок: T1→T2→T3 (вертикальный срез на синтетике) → T4 → T5 → T6 → T7.
+Порядок: T1→T2→T3 (вертикальный срез на синтетике, ✅ 2026-10-04) → T4 → T5 → T6 → T7.
+
+- **T8 (предложение владельца 2026-10-04): Triton-ядра** (OpenAI Triton, GPU) —
+  опциональный ускоритель архитектур: слитые свёртка+norm, fused softmax-Dice.
+  Эталоном остаётся чистый PyTorch-путь: CPU и машины без GPU обязаны обучать
+  и инференсить без Triton; ядра — за детектом возможностей и флагом плана.
+  Внимание на омоним: это НЕ NVIDIA Triton Inference Server (тот — в core/C2).
+
+## Фаза V-next — Viewer как платформа (по аудиту docs/audits/viewer-2026-10-04.md)
+
+1. OVERLAY: реализовать потребителя или удалить вид из реестра.
+2. Сетевой seam: экспорт сконфигурированного DicomWebClient (фасад в src/core),
+   проброс authHeaderProvider из viewer-config.js — secured PACS без proxy-инъекции.
+3. Манифест плагинов (viewer.plugins.js) — регистрация без правки app.js;
+   гейт на коллизии клавиш инструментов.
+4. Починить docs/extensions.md (реальный TOOL API) + API-референс (state, вклады,
+   ctx, CSS-токены, схемы JSON).
+5. Честная история про transfer syntax (uncompressed-only в README/getting-started;
+   опциональный WASM-декодек за флагом — отдельным решением).
+
+## Фаза C-next — Core как production SDK (по аудиту docs/audits/core-2026-10-04.md)
+
+1. Живучесть bus: ExternalWorker не коммитит offset при CodecError/падении без
+   error-топика; backoff в run_forever; poison → error-топик или DLQ.
+2. Идемпотентность записи: провести expected_idempotency_key до PlatformWriter
+   (сейчас всегда None — дубли SEG при повторном прогоне).
+3. Карточка 1.1: трейнер пишет structure/concept_key; публичная JSON-схема
+   карточки в medos/schemas/; верификация digest весов в ModelCard.load.
+4. Реальный kserve_v2-путь: клиентский sliding window + обратный маппинг в source
+   grid (трейнер T4 даёт эталон реализации); e2e против Triton-репозитория из
+   deploy_model.
+5. Многомодельность (маршрутизация по model_id заявки или отказ при mismatch),
+   наблюдаемость (logging/метрики), публикация в PyPI, SDK-only упаковка.
 
 ## Миграция в медленж-репозитории
 
