@@ -359,7 +359,8 @@ def test_a_request_that_says_nothing_about_supervision_is_masked() -> None:
     a run that trains unannotated findings as background converges, writes a
     checkpoint and scores well on each corpus's own split, because that split
     carries the same blind spot as its training data."""
-    assert contract.RunRequest.from_document(_supervision_request()).empty_segment_is_negative is False
+    request = contract.RunRequest.from_document(_supervision_request())
+    assert request.empty_segment_is_negative is False
 
 
 def test_the_control_arm_is_selected_by_the_request_and_only_by_it() -> None:
@@ -380,7 +381,10 @@ def test_a_supervision_member_this_image_does_not_implement_is_refused() -> None
     """A member the reader ignores is a setting the platform believes it applied."""
     with pytest.raises(contract.ContractViolation, match="does not implement"):
         contract.RunRequest.from_document(
-            _supervision_request(supervision={"empty_segment_is_negative": False, "weight_by": "density"}))
+            _supervision_request(
+                supervision={"empty_segment_is_negative": False, "weight_by": "density"}
+            )
+        )
 
 
 # =====================================================================================
