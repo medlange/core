@@ -7,8 +7,8 @@ It is the third of this repository's three products, and the only one that is no
 
 | | what it is | its tests |
 |---|---|---|
-| [`../viewer/`](../viewer/README.md) | a standalone DICOMweb viewer | `viewer/tests/` — reads `viewer/`, nothing else |
-| [`../trainer/`](../trainer/README.md) | a standalone model fitter | `trainer/tests/` — reads `trainer/`, nothing else |
+| [medlange/viewer](https://github.com/medlange/viewer) | a standalone DICOMweb viewer | `tests/` — reads the viewer tree, nothing else |
+| [medlange/trainer](https://github.com/medlange/trainer) | a standalone model fitter | `tests/` — reads the trainer tree, nothing else |
 | **`medos/medos/`** | **the platform that hosts both** | **`../tests/`, and that is deliberate — see below** |
 
 ---
@@ -24,9 +24,9 @@ where it can see them all, which is the repository root.
 
 Measured on 2026-09-26, as a snapshot and not a claim about tomorrow: of 54 modules in
 `tests/unit/`, **13 read only `medos/medos/`, 39 read something else** and 2 read
-neither — the specification (16), the compose file (15), `trainer/` (12),
+neither — the specification (16), the compose file (15), the trainer tree (12),
 `medos/deploy/` (11), the register (11), the release records (9), the training console
-and the OHIF extension (7), `viewer/` (7), the nginx template (4); a module can appear
+and the OHIF extension (7), the viewer tree (7), the nginx template (4); a module can appear
 in several. The sentence here used to read "of the 38 modules … 11 … Twenty-seven",
 whose arithmetic was self-consistent and whose population had moved; register entry 138
 records what it said and why nothing noticed. Not because they are badly scoped, but because *integrating those things is
