@@ -20,4 +20,11 @@ jobs:
       - run: ruff check medos/medos tests
       # tests/unit holds every unit gate; the trainer-dependent ones skip
       # themselves when the trainer tree is absent (this split's case).
-      - run: pytest tests/unit -q
+      - name: pytest tests/unit -q
+        run: pytest tests/unit -q
+        env:
+          # Import resolution on a split checkout: the repo root's product
+          # directory (medos/) otherwise shadows the package (medos/medos/)
+          # as a namespace package on some editable-install shapes. The
+          # explicit path entry pins the real package, matching the monorepo.
+          PYTHONPATH: ${{ github.workspace }}/medos
