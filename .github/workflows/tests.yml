@@ -22,7 +22,15 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/medos
       - name: how many api routes does the app serve
-        run: python -c "from medos.api.app import create_app; a = create_app(connect=lambda **k: None); ps=[r.path for r in a.routes if getattr(r,'path','').startswith('/api/v1')]; print(len(ps), 'routes', sum('service-version' in x for x in ps), 'registry')"
+        run: |
+          python - <<'PYEOF'
+          import medos
+          print("medos ->", getattr(medos, "__file__", None), getattr(medos, "__path__", None))
+          from medos.api.app import create_app
+          app = create_app(connect=lambda **k: None)
+          paths = [r.path for r in app.routes if getattr(r, "path", "").startswith("/api/v1")]
+          print(len(paths), "api routes;", sum("service-version" in p for p in paths), "registry")
+          PYEOF
         env:
           PYTHONPATH: ${{ github.workspace }}/medos
       - run: ruff check medos/medos tests
