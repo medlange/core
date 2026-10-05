@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 import warnings
 from pathlib import Path
 
@@ -29,6 +30,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 PLANE = ROOT / "medos" / "medos" / "api" / "training_plane.py"
 COMPOSE = ROOT / "medos" / "deploy" / "compose" / "docker-compose.yml"
+# `medos/tools/` is a directory of scripts, not a package -- same path insertion
+# `tests/unit/test_permission_contract.py` performs for the same reason.
+if str(ROOT / "medos" / "tools") not in sys.path:
+    sys.path.insert(0, str(ROOT / "medos" / "tools"))
+
+import permcheck  # noqa: E402
 
 
 def _counts() -> tuple[int, int]:
@@ -42,8 +49,10 @@ def _counts() -> tuple[int, int]:
         train = create_training_app()
 
     def api_paths(app: object) -> set[str]:
+        # `permcheck.flatten_routes` -- not `app.routes`: Starlette 1.x defers included
+        # routers behind proxies, and a raw read sees none of them.
         return {
-            r.path for r in app.routes  # type: ignore[attr-defined]
+            r.path for r in permcheck.flatten_routes(app)  # type: ignore[attr-defined]
             if getattr(r, "path", "").startswith("/api/v1")
         }
 
@@ -152,11 +161,11 @@ def test_train_really_is_a_superset_of_core(measured: tuple[int, int]) -> None:
         from medos.api.training_plane import create_training_app
 
         core_paths = {
-            r.path for r in create_app().routes
+            r.path for r in permcheck.flatten_routes(create_app())
             if getattr(r, "path", "").startswith("/api/v1")
         }
         train_paths = {
-            r.path for r in create_training_app().routes
+            r.path for r in permcheck.flatten_routes(create_training_app())
             if getattr(r, "path", "").startswith("/api/v1")
         }
 

@@ -17,25 +17,6 @@ jobs:
       # what the unit suite drives. onnx is the packaging tool's dependency --
       # installed so the deploy_model gates actually run instead of skipping.
       - run: pip install -e ".[dev]" onnx pynrrd
-      - name: which medos does this checkout import
-        run: python -c "import medos; print('medos ->', getattr(medos, '__file__', None), getattr(medos, '__path__', None))"
-        env:
-          PYTHONPATH: ${{ github.workspace }}/medos
-      - name: how many api routes does the app serve
-        run: |
-          python - <<'PYEOF'
-          import medos
-          print("medos ->", getattr(medos, "__file__", None), getattr(medos, "__path__", None))
-          import fastapi, starlette, pydantic
-          print("fastapi", fastapi.__version__, "| starlette", starlette.__version__, "| pydantic", pydantic.VERSION)
-          from medos.api.app import create_app
-          app = create_app(connect=lambda **k: None)
-          print("all routes:", len(app.routes))
-          for r in app.routes[:6]:
-              print("  ", type(r).__name__, getattr(r, "path", getattr(r, "path_format", "?")))
-          PYEOF
-        env:
-          PYTHONPATH: ${{ github.workspace }}/medos
       - run: ruff check medos/medos tests
       # tests/unit holds every unit gate; the trainer-dependent ones skip
       # themselves when the trainer tree is absent (this split's case).

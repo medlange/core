@@ -584,7 +584,7 @@ def test_the_corpus_paths_are_served_and_the_registry_says_so() -> None:
 
     served = {
         (m, getattr(route, "path", ""))
-        for route in create_app().routes
+        for route in permcheck.flatten_routes(create_app())
         for m in (getattr(route, "methods", None) or ())
     }
     declared = {(e["method"], e["path"]): e for e in ENTRIES}
@@ -1060,7 +1060,7 @@ def test_the_twelve_run_rows_are_served_and_the_registry_says_so() -> None:
 
     served = {
         (m, getattr(route, "path", ""))
-        for route in create_app().routes
+        for route in permcheck.flatten_routes(create_app())
         for m in (getattr(route, "methods", None) or ())
     }
     declared_served = {
@@ -2311,7 +2311,7 @@ def test_the_whole_corpus_assembly_surface_is_served() -> None:
 
     served = {
         (m, shape(getattr(route, "path", "")))
-        for route in create_app().routes
+        for route in permcheck.flatten_routes(create_app())
         for m in (getattr(route, "methods", None) or ())
     }
     for operation in UPSTREAM_OPERATIONS:

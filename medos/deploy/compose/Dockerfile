@@ -177,6 +177,9 @@ USER medos
 # It also asserts the training plane is really gone -- an `rm` whose path was wrong
 # would otherwise leave a Core image that passes every check by still containing
 # everything.
-RUN python -c "import importlib.util, sys; from medos.api.app import create_app; app = create_app(connect=lambda **k: None); paths = {r.path for r in app.routes if getattr(r, 'path', '').startswith('/api/v1')}; assert paths, 'core app served no /api/v1 routes'; leaked = sorted(p for p in paths if 'training-runs' in p or 'harvest' in p); assert not leaked, f'core image serves model-preparation routes: {leaked}'; assert importlib.util.find_spec('medos.training') is None, 'medos.training is still in the core image'; print(f'core image ok: {len(paths)} /api/v1 paths, no training plane')"
+# The path walk unwraps Starlette 1.x's lazy `_IncludedRouter` proxies (the `.routes`
+# list then holds proxies whose `original_router` carries the real routes); on older
+# Starlette lines `original_router` is absent and the route itself is used as-is.
+RUN python -c "import importlib.util; from medos.api.app import create_app; app = create_app(connect=lambda **k: None); routes = [x for r in app.routes for x in (getattr(r, 'original_router', None).routes if getattr(r, 'original_router', None) is not None else [r])]; paths = {r.path for r in routes if getattr(r, 'path', '').startswith('/api/v1')}; assert paths, 'core app served no /api/v1 routes'; leaked = sorted(p for p in paths if 'training-runs' in p or 'harvest' in p); assert not leaked, f'core image serves model-preparation routes: {leaked}'; assert importlib.util.find_spec('medos.training') is None, 'medos.training is still in the core image'; print(f'core image ok: {len(paths)} /api/v1 paths, no training plane')"
 
 CMD ["python", "-c", "import medos, sys; print('medos core image ok', sys.version)"]

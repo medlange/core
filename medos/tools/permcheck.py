@@ -91,6 +91,7 @@ __all__ = [
     "TRAINING_SURFACES",
     "check",
     "enforced_permissions",
+    "flatten_routes",
     "forbidden_on_a_training_route",
     "generated_catalogue",
     "render_generated",
@@ -191,6 +192,29 @@ def _app_factory(plane: str):  # noqa: ANN202 - a factory, typed by its caller
     raise ValueError(f"unknown plane {plane!r}")
 
 
+def flatten_routes(app: Any) -> list[Any]:
+    """Every concrete route an app serves, neutral across Starlette lines.
+
+    Starlette 1.x (FastAPI 0.14x) made `include_router` lazy: `app.routes` then holds
+    `_IncludedRouter` proxies whose `original_router` carries the concrete routes, and
+    reading `app.routes` directly sees none of them. Older lines list the concrete
+    routes themselves. This walks both shapes, recursing where a router was included
+    inside an included router, and returns the concrete routes in mount order. It
+    duck-types on `original_router` on purpose: importing a private class name would
+    pin this tool to one Starlette line, which is the coupling that broke CI here.
+    """
+    out: list[Any] = []
+    queue = list(getattr(app, "routes", ()))
+    while queue:
+        route = queue.pop(0)
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            queue[0:0] = list(getattr(inner, "routes", ()))
+            continue
+        out.append(route)
+    return out
+
+
 def unregistered_served_routes(
     entries: list[dict[str, Any]], plane: str = "train"
 ) -> list[tuple[str, str]]:
@@ -208,7 +232,7 @@ def unregistered_served_routes(
 
     declared = {(e["method"], _path_shape(e["path"])) for e in entries}
     missing: list[tuple[str, str]] = []
-    for route in create_app().routes:
+    for route in flatten_routes(create_app()):
         methods = getattr(route, "methods", None)
         path = getattr(route, "path", "")
         if methods is None or not path.startswith("/api/v1"):
@@ -244,7 +268,7 @@ def status_disagrees_with_the_app(
     create_app = _app_factory(plane)
 
     served: set[tuple[str, str]] = set()
-    for route in create_app().routes:
+    for route in flatten_routes(create_app()):
         methods = getattr(route, "methods", None)
         path = getattr(route, "path", "")
         if methods is None or not path.startswith("/api/v1"):
