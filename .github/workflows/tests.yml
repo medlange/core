@@ -26,10 +26,13 @@ jobs:
           python - <<'PYEOF'
           import medos
           print("medos ->", getattr(medos, "__file__", None), getattr(medos, "__path__", None))
+          import fastapi, starlette, pydantic
+          print("fastapi", fastapi.__version__, "| starlette", starlette.__version__, "| pydantic", pydantic.VERSION)
           from medos.api.app import create_app
           app = create_app(connect=lambda **k: None)
-          paths = [r.path for r in app.routes if getattr(r, "path", "").startswith("/api/v1")]
-          print(len(paths), "api routes;", sum("service-version" in p for p in paths), "registry")
+          print("all routes:", len(app.routes))
+          for r in app.routes[:6]:
+              print("  ", type(r).__name__, getattr(r, "path", getattr(r, "path_format", "?")))
           PYEOF
         env:
           PYTHONPATH: ${{ github.workspace }}/medos
