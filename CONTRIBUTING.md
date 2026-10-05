@@ -34,7 +34,8 @@ authority, so it covered nothing and admitted everything.
 
 So: **when you add a guard, break the thing it guards and watch it go red.** Several suites
 here do this to themselves and record the result —
-`trainer/tests/test_masked_loss.py` has four defects reintroduced one at a time, and
+`tests/unit/test_permission_contract.py` holds §19.3.7 shut with a mutation because the
+committed files cannot exhibit the violation, and
 `tests/unit/test_dev_mode_cannot_reach_production.py` exists because one of its own
 mutations escaped on the first attempt and the check had to be rewritten.
 

@@ -168,8 +168,9 @@ from a checkout, with `pip install -e ".[dev,tools]"`.
 ## Conventions that will surprise you
 
 **A check that cannot fail is not a check.** Break the thing your guard guards and watch
-it go red. Several suites do this to themselves: `trainer/tests/test_masked_loss.py`
-reintroduces four real defects one at a time, and
+it go red. Several suites do this to themselves:
+`tests/unit/test_permission_contract.py` reintroduces §19.3.7's violation as a mutation
+because the committed files cannot exhibit it, and
 `tests/unit/test_dev_mode_cannot_reach_production.py` exists in its current form because
 one of its own mutations escaped on the first attempt.
 

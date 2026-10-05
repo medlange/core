@@ -108,7 +108,16 @@
 - **T7. Срез старого:** nnunetv2/monai выводятся из requirements и импортов;
   README/CI/доки приводятся к реальности (4 модуля/54 теста → факт).
 
-Порядок: T1→T2→T3 (вертикальный срез на синтетике, ✅ 2026-10-04) → T4 → T5 → T6 → T7.
+Порядок: T1→T2→T3 (вертикальный срез на синтетике, ✅ 2026-10-04) → T4 ✅ (пуш
+7c296a3, 2026-10-05: sliding window + served-twin + predict CLI) → T5 ✅ (пуш
+8c0209d: fingerprint→plan с reasoned-решениями) → T6 ✅ (пуш 99d68af+2e7c2ee:
+vanilla-plan/vanilla-fit/vanilla-import-nnunet + examples/toy_pipeline.py) →
+T7 ✅ (пуш bb6d6ac: −14 373 строки, nnunetv2/monai/medos.sdk выведены из
+трейнера целиком; сьюты: trainer 127 тестов CPU, монорепо 1542 passed).
+Платформенный run-dir контракт (plan/fit/execute через medos.sdk) сознательно
+срезан — интеграция vanilla-бэкенда с core (autoconfig-маппинг, modelcard) —
+отдельная фаза после C-next, если владелец решит возвращать платформенный
+путь обучения.
 
 - **T8 (предложение владельца 2026-10-04): Triton-ядра** (OpenAI Triton, GPU) —
   опциональный ускоритель архитектур: слитые свёртка+norm, fused softmax-Dice.

@@ -69,18 +69,27 @@ def _extension_files_citing_withdrawn() -> list[str]:
 def _trainer_platform_importers() -> list[str]:
     """Trainer modules whose reach into `medos` is the PLATFORM, not the SDK.
 
-    After the pivot every fitter file imports `medos.sdk` — that is the designed
+    After the pivot every fitter file imported `medos.sdk` — that is the designed
     dependency, not a boundary crossing — so those imports are excluded the way the
-    import-boundary gate excludes them. What this counts is reach into everything else
-    under `medos.*`: today that is `__main__.py` and its supervisor branch alone.
+    import-boundary gate excludes them. The vanilla-stack rewrite then removed the
+    SDK reach along with the run-directory pipeline it served, and entry 137 is
+    AMENDED to record it: today the count is ZERO, and
+    `tests/unit/test_trainer_import_boundary.py` asserts the trainer reaches no
+    `medos` module at all, the SDK included.
+
+    TRACKED AND UNTRACKED both: the vanilla stack lives in files this change has
+    not committed yet, and a measure that reads only the index would let an
+    uncommitted regression pass under the same "zero" the entry now states.
     """
     out = subprocess.run(
-        ["git", "ls-files", "trainer/medos_trainer"], cwd=ROOT,
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard",
+         "trainer/medos_trainer"], cwd=ROOT,
         capture_output=True, text=True,
     ).stdout.split()
     return sorted(
         p for p in out
-        if re.search(
+        if (ROOT / p).is_file()
+        and re.search(
             r"^\s*(?:import\s+medos\b(?!\.sdk)|from\s+medos\.(?!sdk\b))",
             (ROOT / p).read_text(encoding="utf-8", errors="replace"), re.M,
         )
@@ -108,8 +117,8 @@ CLAIMS: tuple[tuple[str, str, int, str, object], ...] = (
     ("139", "extension files citing the withdrawn MOS-UI-012", 4,
      "**four** source files cite them",
      lambda: len(_extension_files_citing_withdrawn())),
-    ("137", "trainer modules importing the platform", 1,
-     "**exactly one** of them", lambda: len(_trainer_platform_importers())),
+    ("137", "trainer modules importing the platform", 0,
+     "**zero** of them", lambda: len(_trainer_platform_importers())),
 )
 
 

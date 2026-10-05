@@ -338,12 +338,24 @@ def test_the_platform_does_not_import_the_training_backend(module: str) -> None:
 def test_the_trainer_package_does_import_it_so_the_previous_test_can_fail() -> None:
     """If `torch` were absent from the whole repository the platform test above would
     pass for the wrong reason. It is in `trainer/`, which is the point: the
-    dependency exists and is on the other side of the boundary."""
+    dependency exists and is on the other side of the boundary.
+
+    THE NNUNETV2 HALF INVERTED, AND THE INVERSION IS THE RECORD. The trainer's
+    nnU-Net/MONAI backend was replaced by a vanilla-PyTorch stack written from
+    scratch, so `trainer/` must now be FREE of `nnunetv2` imports -- and that
+    absence is asserted, not assumed, so the backend cannot creep back in
+    quietly. If a future trainer legitimately re-adopts nnU-Net, this assertion
+    moves with that decision."""
     if not (REPO / "trainer").is_dir():
         pytest.skip("the trainer tree is not part of a core-split checkout")
     hits = scan(_sources("trainer"))
     assert hits.get("torch"), "trainer/ no longer imports torch; has it moved?"
-    assert hits.get("nnunetv2"), "trainer/ no longer imports nnunetv2; has it moved?"
+    assert not hits.get("nnunetv2"), (
+        "trainer/ imports nnunetv2 again. The vanilla-stack rewrite removed the "
+        "nnU-Net backend entirely; a reappearing import is the backend returning "
+        "without the decision being recorded. If the re-adoption is real, update "
+        "this control in the same change."
+    )
 
 
 # --------------------------------------------------------------------------------------

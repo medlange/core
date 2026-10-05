@@ -43,10 +43,11 @@ place somebody looks.
 viewer/                  a standalone DICOMweb viewer. No build step, no bundler, no
                          runtime dependency. Its tests read `viewer/` and nothing else
                          and run with no repository around them.
-trainer/                 a standalone model fitter. EXACTLY ONE of its modules imports
-                         the platform -- `__main__.py`, whose `execute` branch is the
-                         supervisor calling into `medos/medos/training/supervisor.py`;
-                         everything else in it imports only `medos.sdk`, the SDK.
+trainer/                 a standalone vanilla-PyTorch trainer (an nnU-Net-class framework
+                         written from scratch: own UNet, planner, masked-loss loop,
+                         sliding-window inference). NO module in it imports `medos` at
+                         all -- not the platform, not the SDK; every input is a
+                         filesystem path and every output is a file.
 medos/                   the platform AND the SDK. A PRODUCT DIRECTORY, not a package --
                          the package is `medos/medos/` inside it, and the SDK is that
                          package's `sdk/` subtree (`medos.sdk`): the spec format, the

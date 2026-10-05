@@ -59,12 +59,13 @@ PATH_IN_DOC = re.compile(r"`((?:[\w.-]+/)+[\w.-]*)(?:::[\w.]+)?`")
 #: Paths that are NOT repository paths and must not be resolved as such. Each is named with
 #: what it is inside, because a silent skip list is how a check stops checking: a typo in a
 #: repository path that happened to look like one of these would be waved through.
+#: THE FOUR MONAI-BUNDLE ENTRIES WENT WITH THE TRAINER REWRITE: they existed to cover
+#: the old trainer README's bundle-internal citations, and no product README names
+#: `configs/metadata.json`, `configs/preprocessing.json`, `models/model.ts` or `images/`
+#: any more. `configs/inference.json` stays because medos.sdk/README.md -- core product
+#: documentation this gate may not edit -- still names it for what it is.
 NOT_REPOSITORY_PATHS: dict[str, str] = {
-    "configs/metadata.json": "a file inside a MONAI Bundle, not in this repository",
-    "configs/preprocessing.json": "the same -- a bundle's own config directory",
-    "configs/inference.json": "the same",
-    "models/model.ts": "the TorchScript inside a MONAI Bundle",
-    "images/": "a directory inside the staged training volume",
+    "configs/inference.json": "a file inside a MONAI Bundle, not in this repository",
 }
 
 #: Paths a README names in order to say they do NOT exist. A document is allowed to do
@@ -84,7 +85,12 @@ NAMED_TO_SAY_IT_DOES_NOT_EXIST: dict[str, str] = {
 #: medos.sdk/README.md's "Who imports it" table. Exact, not toleranced: the
 #: numbers carry an argument ("35 modules were repointed at it"), and a new importer is a
 #: one-line README edit. Same treatment the register size gets in test_compose_profiles.py.
-IMPORTER_COUNTS: dict[str, int] = {"medos/medos": 35, "trainer/medos_trainer": 6}
+#: THE TRAINER ROW IS GONE, AND THAT IS THE ASSERTION'S SHAPE NOW: the vanilla-stack
+#: rewrite made the trainer standalone, and it imports `medos.sdk` zero times -- a count
+#: the SDK README's table no longer states, so there is nothing to compare it against.
+#: The trainer's independence is held by tests/unit/test_trainer_import_boundary.py,
+#: which asserts the trainer reaches no `medos` module at all, the SDK included.
+IMPORTER_COUNTS: dict[str, int] = {"medos/medos": 35}
 
 #: medos/README.md's package table states a line count per subpackage. TOLERANCED at 10%,
 #: and MOS-TEST-003 requires a tolerance to be named rather than implied: an exact assertion

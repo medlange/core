@@ -96,7 +96,13 @@ def _stated_counts() -> dict[str, list[int]]:
             continue
         if rel == Path(__file__).relative_to(ROOT).as_posix():
             continue
-        text = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
+        path = ROOT / rel
+        if not path.is_file():
+            # DELETED FROM THE WORKING TREE, STILL IN THE INDEX: a file that does not
+            # exist states no count. Reading it would fail the enumeration on the
+            # deletion itself, which is recorded in the index, not argued here.
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
         found = [
             int(m.group(1))
             for pattern in COUNT_PHRASINGS

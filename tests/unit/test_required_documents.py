@@ -263,7 +263,13 @@ def _tracked_python() -> list[str]:
     out = subprocess.run(["git", "ls-files", "--cached", "--others",
                           "--exclude-standard", "*.py"], cwd=REPO,
                          capture_output=True, text=True, check=True)
-    return [p for p in out.stdout.split() if not p.startswith(SPDX_EXEMPT_TREES)]
+    # FILES MUST EXIST TO CARRY A HEADER: the index still lists paths whose deletion
+    # is part of an in-flight change, and a deleted file has no first three lines to
+    # read. The deletion itself is recorded by the commit; this check reads bytes.
+    return [
+        p for p in out.stdout.split()
+        if not p.startswith(SPDX_EXEMPT_TREES) and (REPO / p).is_file()
+    ]
 
 
 def test_every_first_party_source_file_carries_the_spdx_identifier() -> None:

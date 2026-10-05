@@ -3,24 +3,35 @@
 
 WHAT ENTRY 82 SAYS, AND WHAT THIS MODULE HOLDS
 ------------------------------------------------
-    "`code_commit` and `image_digest` ... change with every build, so a value written
-    into `docker-compose.yml` is correct exactly until the next `docker compose build`
-    and silently false afterwards -- and it is silently false in the provenance record of
-    every training run, which is the one place `MOS-TRAIN-126` exists to make
-    trustworthy."
+    "`code_commit` and `image_digest` ... change with every build, so a value
+    written into `docker-compose.yml` is correct exactly until the next
+    `docker compose build` and silently false afterwards -- and it is silently
+    false in the provenance record of every training run, which is the one
+    place the record exists to make trustworthy."
 
-The fix is that the trainer image computes the two facts about ITSELF at build time and
-the platform reads them back. What can be held here, without a container, is the half
-that is arithmetic: the stamp refuses a placeholder commit, the content digest is a pure
-function of the image's content, and the nine keys the trainer emits are the nine keys
-the router demands. The other half -- that a REBUILD changes the value with nobody
-editing a file -- needs two builds and is in
+The fix is that the trainer image computes the two facts about ITSELF at
+build time. What can be held here, without a container, is the half that is
+arithmetic: the stamp refuses a placeholder commit, the content digest is a
+pure function of the image's content, and the nine keys the trainer emits
+are the nine keys the router demands. The other half -- that a REBUILD
+changes the value with nobody editing a file -- needs two builds and is in
 `tests/integration/test_trainer_image.py::test_a_rebuild_restamps_without_anybody_editing_a_file`.
 
-THE THREE KEY SETS ARE COMPARED AND NOT RESTATED. `medos/medos/api/routes_training.py` and
-`medos/medos/training/runs.py` own the vocabulary; `medos_trainer.environment` emits it. Each
-is spelled in its own module because neither image imports the other at run time, and
-this module is the only thing making them one vocabulary.
+THE TWO KEY SETS ARE COMPARED AND NOT RESTATED. `medos/medos/api/routes_training.py`
+and `medos/medos/training/runs.py` own the vocabulary; `medos_trainer.environment`
+emits it. Each is spelled in its own module because neither image imports
+the other at run time, and this module is the only thing making them one
+vocabulary.
+
+WHAT CHANGED UNDER THIS GATE
+-----------------------------
+The trainer's nnU-Net backend was replaced by a vanilla-PyTorch stack
+written from scratch, and the platform handshake went with it: the trainer
+is standalone and the declaration's `backend_versions` and `preprocessing`
+blocks are recorded as EMPTY rather than filled from a backend registry or
+a bindings file -- both of which the rewrite deleted. The gates below
+assert the new reality; the nine-key shape, the seeds, the determinism
+settings and the stamp are unchanged.
 
 Spec: MOS-TRAIN-124, MOS-TRAIN-125, MOS-TRAIN-126, MOS-REL-037,
 docs/spec/99-known-inconsistencies.md entry 82.
@@ -47,7 +58,6 @@ if not (TRAINER_ROOT / "medos_trainer").is_dir():
 if str(TRAINER_ROOT) not in sys.path:
     sys.path.insert(0, str(TRAINER_ROOT))
 
-from medos.sdk.canonical import canonical_bytes  # noqa: E402
 from medos.training import runs as tr  # noqa: E402
 from medos_trainer import environment as env  # noqa: E402
 from medos_trainer import stamp as st  # noqa: E402
@@ -75,35 +85,78 @@ def test_the_determinism_block_carries_every_key_mos_train_124_binds() -> None:
     assert tuple(sorted(env.DETERMINISM)) == tuple(sorted(tr._DETERMINISM_KEYS))
 
 
-def test_the_framework_block_carries_every_key_mos_train_124_binds() -> None:
-    """Including `monai`, which this image does not install and records as `absent`.
+def test_the_framework_block_names_only_what_the_vanilla_stack_installs() -> None:
+    """torch and numpy, and nothing else.
 
-    `medos.training.runs._binding_refusals` refuses a block with a missing key --
-    "an absent key is not an open value; it is a question nobody answered" -- so the key
-    has to be present. Its value is a record of the fact that the platform GENERATES
-    MONAI Bundle configs as data and never imports MONAI.
+    The pre-vanilla image recorded `monai` as `absent` -- the platform then
+    generated MONAI Bundle configs as data and never imported MONAI. The
+    rewrite removed the reason: the trainer writes its own bundle and
+    installs neither MONAI nor SimpleITK, so declaring either would be a
+    claim about a package `pip freeze` cannot find. Every key the trainer
+    declares must still be a key the router's vocabulary knows, and the two
+    absent-by-design names stay asserted by their absence.
     """
-    assert tuple(sorted(env._FRAMEWORK_DISTRIBUTIONS)) == tuple(sorted(tr._FRAMEWORK_KEYS))
-    assert "monai" in env._FRAMEWORK_DISTRIBUTIONS
+    assert set(env._FRAMEWORK_DISTRIBUTIONS) <= set(tr._FRAMEWORK_KEYS)
+    assert set(env._FRAMEWORK_DISTRIBUTIONS) == {"torch", "numpy"}
+    assert "monai" not in env._FRAMEWORK_DISTRIBUTIONS
+    assert "simpleitk" not in env._FRAMEWORK_DISTRIBUTIONS
 
 
-def test_only_the_backend_this_image_installs_is_declarable() -> None:
-    """`MOS-REL-037` forbids a range on a recorded version; there is nothing to pin.
+def test_the_declaration_records_no_backend_and_no_bindings() -> None:
+    """THE NEW REALITY, as a document: `backend_versions` and `preprocessing`
+    are present and EMPTY.
 
-    A deployment whose trainer ships only nnU-Net answers 503 for an `auto3dseg` submit,
-    naming `backend_versions.auto3dseg`, which is the truth about that deployment.
+    The vanilla stack is its own backend -- there is no pluggable registry
+    and no nnU-Net distribution to pin -- and a standalone run binds no
+    deployment-level preprocessing spec, so the honest values are empty
+    objects, not omitted keys and not claims about packages that are not
+    installed. The keys stay because the nine-key shape is the vocabulary
+    this trainer has always emitted.
     """
-    assert set(env._BACKEND_DISTRIBUTIONS) == {"nnunet"}
-    assert set(env._BACKEND_DISTRIBUTIONS) <= set(tr.AUTO_CONFIGURING_BACKENDS)
+    assert not hasattr(env, "_BACKEND_DISTRIBUTIONS"), (
+        "the backend registry is back. The vanilla stack declares no backend "
+        "distributions; a registry here is the nnU-Net shape returning under "
+        "another name"
+    )
 
 
-def test_the_declared_backend_is_one_mos_ui_148_permits_on_the_no_code_console() -> None:
-    """`MOS-UI-148`: `nnunet` or `auto3dseg`, and the console MUST NOT offer
-    `monai_supervised`."""
-    from medos_trainer import BACKEND_KIND
+def test_the_package_declares_no_backend_kind() -> None:
+    """`BACKEND_KIND` named the one backend the image shipped (`nnunet`).
 
-    assert BACKEND_KIND in tr.AUTO_CONFIGURING_BACKENDS
-    assert BACKEND_KIND != "monai_supervised"
+    A one-backend image has no backend to name: the framework is the backend,
+    and its version is the build stamp's `code_commit`. The constant going
+    away is the assertion -- a backend kind reappearing on the package is a
+    second-backend decision that has to be made out loud, in code and in the
+    environment document together.
+    """
+    import medos_trainer
+
+    assert not hasattr(medos_trainer, "BACKEND_KIND"), (
+        "medos_trainer.BACKEND_KIND is back. The vanilla stack is not one of "
+        "several selectable backends; reintroducing a kind is a product "
+        "decision, not a constant"
+    )
+
+
+def test_a_declaration_carries_the_empty_blocks_and_the_nine_keys(
+    tmp_path: Path,
+) -> None:
+    """`declare()` end to end against a written stamp: the document shape
+    holds, the empty blocks are the recorded facts, and the observed keys
+    are present. `allow_cpu` because this unit test declares no GPU."""
+    stamp_file = tmp_path / "build-stamp.json"
+    assert st.main([
+        "--code-commit", "e" * 40, "--code-dirty", "false", "--out", str(stamp_file)
+    ]) == 0
+    document = env.declare(stamp_path=stamp_file, allow_cpu=True)
+
+    assert tuple(sorted(document)) == tuple(sorted(env.ENVIRONMENT_KEYS))
+    assert document["backend_versions"] == {}
+    assert document["preprocessing"] == {}
+    assert document["code_commit"] == "e" * 40
+    assert document["framework_versions"]["torch"]
+    assert document["hardware"]["accelerator"] == "cpu"
+    assert document["hardware"]["cpu_run_explicitly_permitted"] is True
 
 
 # =====================================================================================
@@ -112,9 +165,9 @@ def test_the_declared_backend_is_one_mos_ui_148_permits_on_the_no_code_console()
 def test_the_stamp_refuses_a_placeholder_commit() -> None:
     """A commit the platform would then refuse at submit, refused at BUILD instead.
 
-    `medos.training.runs._COMMIT_RE` is what a submit is checked against. Catching it
-    here means an unbuildable image rather than an image that builds and then cannot
-    train.
+    `medos.training.runs._COMMIT_RE` is what a submit is checked against.
+    Catching it here means an unbuildable image rather than an image that
+    builds and then cannot train.
     """
     for bad in ("", "HEAD", "unknown", "0", "deadbeef", "Z" * 40):
         with pytest.raises(ValueError, match="code_commit"):
@@ -142,6 +195,8 @@ def test_the_stamps_canonical_form_agrees_with_the_platforms() -> None:
     """`stamp.py` is stdlib-only because it runs during `docker build`. This is the
     price: a second canonicaliser, held against the real one on the properties that
     decide a digest -- key order and separators (`MOS-EVID-008`)."""
+    from medos.sdk.canonical import canonical_bytes
+
     for document in (
         {"b": 1, "a": 2},
         {"nested": {"z": [1, 2, {"y": "x"}], "a": None}},
@@ -219,62 +274,3 @@ def test_the_dirty_flag_has_two_values_and_no_third(raw: str, expected: bool) ->
 def test_an_unreadable_dirty_flag_is_refused_rather_than_guessed() -> None:
     with pytest.raises(ValueError, match="neither true nor false"):
         st._dirty_flag("probably")
-
-
-# =====================================================================================
-# 3. The preprocessing binding: declared spec, COMPUTED digest
-# =====================================================================================
-def test_the_spec_digest_is_computed_from_the_document_and_not_declared(
-    tmp_path: Path,
-) -> None:
-    """Entry 82's defect has a third possible site and this is where it was closed.
-
-    A digest typed beside a spec is correct until somebody edits the spec, and then it is
-    false inside `MOS-TRAIN-124`'s binding. `preprocessing-bindings.json` declares WHICH
-    spec (a deployment decision) and never the digest.
-    """
-    from medos.sdk.canonical import sha256_hex
-    from medos.sdk.fixtures import selftest_spec_document
-
-    bindings = tmp_path / "bindings.json"
-    bindings.write_text(json.dumps({
-        "capabilities": {
-            "lung_segmentation": {
-                "spec_document": "medos.sdk.fixtures:selftest_spec_document",
-                "output_kind": "label",
-            }
-        }
-    }), encoding="utf-8")
-
-    bound = env.preprocessing_bindings(bindings)["lung_segmentation"]
-    expected = "sha256:" + sha256_hex(canonical_bytes(selftest_spec_document()))
-    assert bound["digest"] == expected
-    # Every key `medos/medos/api/routes_training.py::_SPEC_KEYS` requires.
-    assert set(bound) >= {"id", "version", "digest", "output_kind"}
-    assert bound["output_kind"] == "label"
-
-
-def test_the_shipped_bindings_file_names_a_spec_this_image_can_resolve() -> None:
-    """The file compose mounts, read with the real resolver. A binding that names a
-    module the image does not carry is a 503 nobody sees until the first submit."""
-    shipped = REPO_ROOT / "trainer" / "preprocessing-bindings.json"
-    bound = env.preprocessing_bindings(shipped)
-    assert bound, "the shipped bindings file binds no capability"
-    for capability, binding in bound.items():
-        assert binding["digest"].startswith("sha256:"), capability
-        assert binding["output_kind"] == "label", (
-            f"{capability} is bound with output_kind={binding['output_kind']!r}; "
-            "MOS-TRAIN-211 fixes an auto-configuring default only for `label`"
-        )
-
-
-def test_a_deployment_that_binds_nothing_is_refused(tmp_path: Path) -> None:
-    bindings = tmp_path / "bindings.json"
-    bindings.write_text(json.dumps({"capabilities": {}}), encoding="utf-8")
-    with pytest.raises(ValueError, match="binds no capability"):
-        env.preprocessing_bindings(bindings)
-
-
-def test_an_absent_bindings_file_is_refused_rather_than_defaulted(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="MOS-IMG-045"):
-        env.preprocessing_bindings(tmp_path / "nowhere.json")

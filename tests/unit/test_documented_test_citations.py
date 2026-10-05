@@ -41,7 +41,14 @@ ROOT = Path(__file__).resolve().parents[2]
 #: `docs/spec/` is normative prose whose examples are illustrative, and `docs/releases/` is
 #: history: a release record naming a test names the test as it was at that tag.
 #: `docs/README.md` says so in terms.
-SKIP = ("docs/spec/", "docs/releases/")
+#: `docs/audits/` joins them for the same reason: an audit is a DATED record of what was
+#: measured on the tree that day. `docs/audits/trainer-2026-10-04.md` names the nnU-Net
+#: era's test files (`test_ab_evaluate.py` and friends) as the coverage that existed when
+#: the audit ran; the vanilla-stack rewrite deleted those files, and rewriting the audit's
+#: evidence to track the present would turn a dated record into a lie about what was
+#: found. Live documents must name live tests; audits name the tests that were live at
+#: their date.
+SKIP = ("docs/spec/", "docs/releases/", "docs/audits/")
 
 #: The citation corpus is the MONOREPO's: it names test files across viewer/ and
 #: trainer/, which are not part of a core-split checkout. Their own repos carry
@@ -99,7 +106,10 @@ def _text(rel: str) -> str:
 def _test_files() -> set[str]:
     return {
         p for p in TRACKED
-        if re.search(r"(^|/)test_\w+\.py$", p) or p.endswith(".test.mjs")
+        if (re.search(r"(^|/)test_\w+\.py$", p) or p.endswith(".test.mjs"))
+        and (ROOT / p).is_file()
+        # DELETED FROM THE WORKING TREE, STILL IN THE INDEX: an in-flight deletion
+        # defines no functions and cites none; the commit records the deletion.
     }
 
 

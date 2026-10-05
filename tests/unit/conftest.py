@@ -38,7 +38,6 @@ _MONOREPO_STRUCTURAL: dict[str, tuple[str, ...]] = {
         "[viewer]",
         "unchecked_remainder",
         "dead_entry",
-        "importer_counts_are_exact[trainer",
         "viewer_ships_the_number_of_files",
         "viewer_line_figure",
     ),
