@@ -346,8 +346,8 @@ def test_the_importer_counts_are_exact(prefix: str) -> None:
 # ======================================================================================
 # viewer/README.md's shipped-surface claim
 # ======================================================================================
-#: What "48 files, ~20 000 lines" counts: everything tracked under `viewer/` except its own
-#: suite and its own README. MEASURED: 48 files exactly, 19,693 lines.
+#: What "64 files, ~20 000 lines" counts: everything tracked under `viewer/` except its own
+#: suite and its own README. MEASURED: 64 files exactly, 22,189 lines.
 #:
 #: WHY THIS ONE IS GATED AND THE PACKAGE TABLE'S COUNTS ARE TOLERANCED. The file count is a
 #: claim about the SOUP surface, and `docs/adr/BUILD_VS_ADOPT.md` rests the IEC 62304 §8.1.2
@@ -357,7 +357,7 @@ def test_the_importer_counts_are_exact(prefix: str) -> None:
 #: tolerance means nothing -- so the tolerance is stated here. It was "~17 000" and correct
 #: until `viewer/i18n/` arrived with 2,256 lines, which is drift with a cause rather than
 #: rot, and is why the tolerance is wide.
-VIEWER_SHIPPED_FILES = 48
+VIEWER_SHIPPED_FILES = 64
 VIEWER_LINE_TOLERANCE = 0.15
 
 
