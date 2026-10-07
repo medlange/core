@@ -114,6 +114,19 @@
 vanilla-plan/vanilla-fit/vanilla-import-nnunet + examples/toy_pipeline.py) →
 T7 ✅ (пуш bb6d6ac: −14 373 строки, nnunetv2/monai/medos.sdk выведены из
 трейнера целиком; сьюты: trainer 127 тестов CPU, монорепо 1542 passed).
+Фазы паритета (✅ 2026-10-06/07): ensemble-предиктор + ensemble-оценка в
+crossval (W11), poly-LR (W12), каскады coarse→fine (W13), DDP через torchrun
+(W14) — пуш bb520a5, 174 теста. Бенчмарк на реальном датасете (W15,
+docs/benchmark-pulmo-2026-10-07.md): 20 кейсов hydrothorax (PulmoAI),
+один сплит/бюджет, один оценщик — nnU-Net 0.764 fg Dice vs Medlange 0.000
+на 5 эпохах. Найдено и исправлено по ходу: per-пресет физический патч
+(8x дефицит контекста GPU), rot90 для неквадратных патчей, --batch-size
+override, --device у evaluate, pytest pythonpath. ВЫВОД: W16 — нормализация
+интенсивности по статистикам fingerprint (z-score как у nnU-Net CTNormalization),
+ресемплинг к медианному спейсингу, воркеры даталоадера, перезапуск на
+100 эпохах. Только после W16 заявление "лучше nnU-Net" имеет смысл проверять
+повторным бенчмарком.
+
 Платформенный run-dir контракт (plan/fit/execute через medos.sdk) сознательно
 срезан — интеграция vanilla-бэкенда с core (autoconfig-маппинг, modelcard) —
 отдельная фаза после C-next, если владелец решит возвращать платформенный
