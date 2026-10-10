@@ -1,218 +1,251 @@
-# Medlange — дорожная карта доработки
+# Medlange — refinement roadmap
 
-> Зафиксировано 2026-10-02 по итогам пользовательского E2E и развилки продуктов.
-> Umbrella: **Medlange**. Продукты: **Core** (SDK, `medos.sdk`), **Trainer**
- (nnU-Net-аналог), **Viewer** (DICOMweb-фреймворк).
+> Recorded 2026-10-02 following the user E2E and the product split.
+> Umbrella: **Medlange**. Products: **Core** (SDK, `medos.sdk`), **Trainer**
+> (nnU-Net analog), **Viewer** (DICOMweb framework).
 
-## Цель
+## Goal
 
-- **Medlange Core — полноценный SDK**: карточка модели → пайплайн → адаптеры
-  (PACS / шина / inference) → постобработка → результаты в архиве. Устанавливается
-  `pip install medos`, конфигурируется профилем развёртывания, работает в локальном и
-  внешнем (bus-driven) режимах.
-- **Medlange Viewer — полноценный настраиваемый фреймворк в классе OHIF**: модульное
-  ядро, документированный API расширений (панели, инструменты, действия, протоколы),
-  конфигурация без пересборки, брендинг, i18n. Добавление функционала разработчиком —
-  через стабильные точки расширения, а не правкой ядра.
+- **Medlange Core — a full-fledged SDK**: model card → pipeline → adapters
+  (PACS / bus / inference) → post-processing → results in the archive. Installed
+  via `pip install medos`, configured with a deployment profile, runs in local and
+  external (bus-driven) modes.
+- **Medlange Viewer — a full-fledged customizable framework in the OHIF class**:
+  modular core, documented extension API (panels, tools, actions, protocols),
+  configuration without a rebuild, branding, i18n. Developers add functionality
+  through stable extension points, not by editing the core.
 
-## Фаза U — UI/UX (первым делом)
+## Phase U — UI/UX (first priority)
 
-- **U1. Сборка из коробки.** Ловушка `MEDOS_API_VIEWER_AUTHORIZATION` (сырой ключ молча
-  даёт 401; нужен префикс `Bearer `) — либо принимать обе формы, либо отказ с
-  диагнозом. Цель: `docker compose up` → один сценарий `medos doctor`-уровня, который
-  сам говорит, что настроить, + опциональный сид демо-исследования.
-- **U2. Навигация.** Сегодня анализ живёт на отдельной странице (`/medicalos/standalone/`),
-  переход «Open the viewer» открывается в той же вкладке и теряет контекст исследования.
-  Цель: единая оболочка — viewer и AI-панель как одна среда; ссылки открываются с
-  сохранением контекста (study в URL); breadcrumbs.
-- **U3. AI-поток внутри просмотра.** Кнопка «Анализ» на экране исследования (не на
-  отдельной странице), выбор capability, индикатор прогресса, авто-перезагрузка SEG/SR
-  наложением по готовности. ✅ 2026-10-03 (G-U3; заодно закрыт closure зависимостей
-  capability через `GET /api/v1/capabilities` и кэш серий при перезагрузке)
-- **U4. Загрузка DICOM через вебморду.** ✅ 2026-10-03 (G-U4): кнопка «Загрузить DICOM»
-  + drag-drop в ворклисте → STOW-RS `{dicomweb}/studies` (multipart/related руками,
-  FailedSOPSequence показывается читателю); live: LCTSC-Test-S1-201 из PulmoAI
-  (118 файлов) → 200 → исследование в ворклисте. Креденшел выбирается по методу
-  nginx-мапой: чтения — read-only viewer key, POST — uploader key (study.write),
-  не задан — 401 (решение развёртывания). Запрошено пользователем 2026-10-03.
+- **U1. Out-of-the-box setup.** The `MEDOS_API_VIEWER_AUTHORIZATION` trap (a raw
+  key silently returns 401; a `Bearer ` prefix is required) — either accept both
+  forms, or fail with a diagnosis. Goal: `docker compose up` → a single
+  `medos doctor`-level scenario that says by itself what to configure, + an
+  optional seed of a demo study.
+- **U2. Navigation.** Today the analysis lives on a separate page (`/medicalos/standalone/`),
+  the "Open the viewer" link opens in the same tab and loses the study context.
+  Goal: a single shell — viewer and AI panel as one environment; links open with
+  context preserved (study in the URL); breadcrumbs.
+- **U3. AI flow inside the viewer.** An "Analyze" button on the study screen (not
+  on a separate page), capability selection, a progress indicator, auto-reload
+  of SEG/SR as an overlay when ready. ✅ 2026-10-03 (G-U3; the closure of
+  capability dependencies via `GET /api/v1/capabilities` and the series cache
+  on reload were also closed)
+- **U4. DICOM upload via the web UI.** ✅ 2026-10-03 (G-U4): an "Upload DICOM"
+  button + drag-drop in the worklist → STOW-RS `{dicomweb}/studies` (multipart/related
+  assembled by hand, FailedSOPSequence is shown to the reader); live: LCTSC-Test-S1-201
+  from PulmoAI (118 files) → 200 → study appears in the worklist. The credential
+  is selected by HTTP method via an nginx map: reads — read-only viewer key,
+  POST — uploader key (study.write); if not set — 401 (a deployment decision).
+  Requested by the user 2026-10-03.
 
-## Фаза V — Viewer как фреймворк
+## Phase V — Viewer as a framework
 
-- **V1. API расширений.** Документированные точки: панель, инструмент тулбара,
-  действие, протокол раскладки; стабильный JS-API поверх `core/state`; пример плагина.
-- **V2. Конфигурация без сборки.** `viewer.config` (включённые панели/модули, тема,
-  брендинг, роутинг) — расширение нынешних `presets.json` / `protocols.json` /
-  `build.json`. ✅ 2026-10-03 (G-V2)
-- **V3. Документация разработчика.** ✅ 2026-10-03: `docs/getting-started.md`
-  («панель за 30 строк», шаги 1–6), `docs/plugin-template.md` (производственный
-  шаблон с гейтами в комментариях), `docs/testing.md` (устройство сьюта, 5 правил,
-  скелет теста); `tests/test_plugin_template.py` прогоняет гейты по коду из доков —
-  гайд не может протухнуть незаметно; dogfood: панель из гайда смонтирована в
-  браузере (правый рельс, «Серии») и пройдена сьютом, затем ревертнута.
+- **V1. Extension API.** Documented points: panel, toolbar tool, action, layout
+  protocol; a stable JS API on top of `core/state`; a plugin example.
+- **V2. Configuration without a build.** `viewer.config` (enabled panels/modules,
+  theme, branding, routing) — an extension of the current `presets.json` /
+  `protocols.json` / `build.json`. ✅ 2026-10-03 (G-V2)
+- **V3. Developer documentation.** ✅ 2026-10-03: `docs/getting-started.md`
+  ("a panel in 30 lines", steps 1–6), `docs/plugin-template.md` (a production
+  template with gates in the comments), `docs/testing.md` (suite anatomy, 5 rules,
+  test skeleton); `tests/test_plugin_template.py` runs the gates against the code
+  from the docs — the guide cannot silently go stale; dogfood: the panel from the
+  guide was mounted in the browser (right rail, "Series") and passed the suite,
+  then reverted.
 
-## Фаза C — Core как полноценный SDK
+## Phase C — Core as a full-fledged SDK
 
-- **C1. Замыкание результатов.** `Pipeline(..., store=...)` → SEG/SR через единый
-  writer (`medos.writer`, ленивый адаптерный импорт) → `PacsAdapter.store`. External-режим
-  тогда сам кладёт результаты в архив.
-- **C2. Сервинг моделей.** Карточка → staging в Triton model repository; связка с
-  `ConversionRun`; нормативный путь «обученная модель тренера на Triton». ✅ 2026-10-03
-  (G-C2; блокер последнего шага — nvcr.io 403, зафиксирован в e2e-staging/g-c2)
-- **C3. Профили развёртывания.** YAML-профиль адаптеров + `python -m medos.sdk run
-  --profile local|mosmed`; публикация `medos` в PyPI. ✅ 2026-10-03 (G-C3; PyPI — ещё нет)
-- **C4. Документация + examples.** ✅ 2026-10-03: cookbook
-  `medos/examples/profiles/README.md` — три живых рецепта (local → JSON-результат;
+- **C1. Closing the results loop.** `Pipeline(..., store=...)` → SEG/SR via a
+  unified writer (`medos.writer`, lazy adapter import) → `PacsAdapter.store`.
+  External mode then stores the results in the archive by itself.
+- **C2. Model serving.** Card → staging into a Triton model repository; linkage
+  with `ConversionRun`; the canonical path "trainer's trained model onto Triton".
+  ✅ 2026-10-03 (G-C2; the blocker of the last step — nvcr.io 403, recorded in
+  e2e-staging/g-c2)
+- **C3. Deployment profiles.** YAML profile of adapters + `python -m medos.sdk run
+  --profile local|mosmed`; publishing `medos` to PyPI. ✅ 2026-10-03 (G-C3; PyPI — not yet)
+- **C4. Documentation + examples.** ✅ 2026-10-03: cookbook
+  `medos/examples/profiles/README.md` — three live recipes (local → JSON result;
   mosmed/Kafka: KAFKA-MESSAGE → `python -m medos.sdk run --once` → DICOMREPORTNOTIFY
-  с подлинным выводом; карточка→Triton) + таблица отладки; гейты в
-  `tests/unit/test_cookbook.py`; попутно исправлено направление `inbound.fields`
-  (внешний ключ → каноническое поле) в mosmed-профиле.
-- **C5. Живучесть (из E2E 2026-10-02).** Исправлено: QIDO DICOM JSON Model в PACS-адаптере.
-  ✅ 2026-10-04: дефолтный селектор pipeline — CT-only, каждое исключение записано
-  (`PipelineResult.exclusions`: series_uid, modality, причина — derived/не-CT/кастомный
-  селектор); отказы pipeline — словарь (`PipelineError.code/study_uid/as_dict()`:
-  `no_eligible_series`, `store_refused`), CLI печатает словарь; профильный
-  `image_only` — явный opt-in, не тихий дефолт.
+  with genuine output; card→Triton) + a debugging table; gates in
+  `tests/unit/test_cookbook.py`; along the way, the direction of `inbound.fields`
+  (external key → canonical field) was fixed in the mosmed profile.
+- **C5. Resilience (from E2E 2026-10-02).** Fixed: QIDO DICOM JSON Model in the
+  PACS adapter. ✅ 2026-10-04: the default pipeline selector is CT-only, every
+  exclusion is recorded (`PipelineResult.exclusions`: series_uid, modality,
+  reason — derived/non-CT/custom selector); pipeline failures are a dict
+  (`PipelineError.code/study_uid/as_dict()`: `no_eligible_series`, `store_refused`),
+  the CLI prints the dict; the profile-level `image_only` is an explicit opt-in,
+  not a silent default.
 
-## Всплывшее по ходу (дефекты и долги)
+## Found along the way (defects and debts)
 
-- **OHIF-расширение** (`medos/web/ohif-extension`) шлёт одиночный `target` — выбор
-  `emphysema_laa` там всё ещё падает; нужен тот же descriptor-call, что в нативном
-  viewer'е (core).
-- **Дефект трейсера:** `instance_norm` в shipped-бандлах запечён с `train=True`
-  (конвертации в ONNX верны, флаг достаётся исходному трейсу; влияет на сервинг-числа).
-  Завести в trainer как баг-пункт.
-- **Triton-разблокировка:** `docker login nvcr.io` (или mirror образа
-  `nvcr.io/nvidia/tritonserver`) — после чего профиль `inference` поднимается без кода.
+- **W21, trainer defect (open; the texture theory disproved by recurrence):**
+  a deadlock in AMP synchronization (`GradScaler` → `found_inf.item()`, GPU 0%,
+  two byte-identical faulthandler dumps 10 minutes apart). First occurrence
+  (2026-10-11 ~00:20, full-parity): producer in gaussian-blur conv3d.
+  Second occurrence (2026-10-11 ~01:40, INTENSITY-ONLY — the "safe" config):
+  producer in `queue.put` backpressure, same main-thread stack →
+  the producer is collateral, the hang is the device sync itself. Suspect:
+  AMP scaler × torch 2.14.1+cu130 × RTX 5090 (all pre-AMP runs completed,
+  both hangs at the scaler site, non-deterministically). Mitigation:
+  W21b (blur on scipy — kept, the better implementation) + seed-0 restarted
+  with fp32+TF32/native allocator without GradScaler; seed 1 remains on AMP as
+  the comparison arm. Root cause not proven: minimal repro + bug report to torch
+  — open; do not enable AMP on this machine until repro. Report: W21/W21c.
+- **OHIF extension** (`medos/web/ohif-extension`) sends a single `target` —
+  selecting `emphysema_laa` still fails there; it needs the same descriptor call
+  as in the native viewer (core).
+- **Tracer defect:** `instance_norm` in shipped bundles is baked with `train=True`
+  (the ONNX conversions are correct, the flag reaches the original trace; it
+  affects the serving numbers). File it in trainer as a bug item.
+- **Triton unblock:** `docker login nvcr.io` (or a mirror of the image
+  `nvcr.io/nvidia/tritonserver`) — after which the `inference` profile comes up
+  without any code changes.
 
-## Фаза T-vanilla — Trainer без MONAI и nnU-Net (решение владельца 2026-10-04)
+## Phase T-vanilla — Trainer without MONAI and nnU-Net (owner decision 2026-10-04)
 
-Трейнер переписывается на собственный стек (чистый PyTorch): цель — самостоятельный
-фреймворк, к которому приходят сами по себе, а не производная чужих. Основание —
-аудит `docs/audits/trainer-2026-10-04.md`. Шаги:
+The Trainer is being rewritten on its own stack (pure PyTorch): the goal is a
+self-standing framework that people adopt on its own merits, not a derivative of
+someone else's. Basis — the audit `docs/audits/trainer-2026-10-04.md`. Steps:
 
-- **T1. Сети с нуля:** собственный 3D UNet (stem-strides из плана, instance norm,
-  deep supervision) вместо обёрток над MONAI-архитектурами; overlays больше не
-  «написаны, но не прибиты» — это единственный путь.
-- **T2. Данные с нуля:** загрузчик кейсов (NIfTI/нативный формат), weighted patch
-  sampling, аугментации (mirror/rotate/scale/intensity) — свои, без nnU-Net pipeline.
-- **T3. Обучение:** свой цикл (masked region loss сохраняется — фирменная
-  подсистема), LR-плато, чекпоинты, детерминизм (существующий environment/stamp
-  переезжают как есть).
-- **T4. Inference с нуля:** sliding window с гауссовским блендингом — сразу закрывает
-  и внешний predict CLI, и известный разрыв kserve_v2 в core (нет обратного
-  маппинга patch→source).
-- **T5. Планирование:** fingerprint→plan (патч/спейсинг/батч по VRAM) — своя логика
-  вместо nnU-Net plans.
-- **T6. Автономный вход:** генератор run-dir из nnU-Net-структуры датасета +
-  `trainer/examples/` — сторонний исследователь доходит до модели без платформы.
-- **T7. Срез старого:** nnunetv2/monai выводятся из requirements и импортов;
-  README/CI/доки приводятся к реальности (4 модуля/54 теста → факт).
+- **T1. Networks from scratch:** our own 3D UNet (stem strides from the plan,
+  instance norm, deep supervision) instead of wrappers over MONAI architectures;
+  overlays are no longer "written but not hooked up" — this is the only path.
+- **T2. Data from scratch:** a case loader (NIfTI/native format), weighted patch
+  sampling, augmentations (mirror/rotate/scale/intensity) — our own, without the
+  nnU-Net pipeline.
+- **T3. Training:** our own loop (masked region loss is preserved — the signature
+  subsystem), LR plateau, checkpoints, determinism (the existing environment/stamp
+  move over as-is).
+- **T4. Inference from scratch:** sliding window with Gaussian blending —
+  immediately closes both the external predict CLI and the known kserve_v2 gap
+  in core (no reverse patch→source mapping).
+- **T5. Planning:** fingerprint→plan (patch/spacing/batch sized to VRAM) — our
+  own logic instead of nnU-Net plans.
+- **T6. Standalone onboarding:** a run-dir generator from the nnU-Net dataset
+  structure + `trainer/examples/` — an external researcher gets to a trained
+  model without the platform.
+- **T7. Cutting away the old:** nnunetv2/monai are removed from requirements and
+  imports; README/CI/docs are brought in line with reality ("4 modules/54 tests"
+  → the actual numbers).
 
-Порядок: T1→T2→T3 (вертикальный срез на синтетике, ✅ 2026-10-04) → T4 ✅ (пуш
-7c296a3, 2026-10-05: sliding window + served-twin + predict CLI) → T5 ✅ (пуш
-8c0209d: fingerprint→plan с reasoned-решениями) → T6 ✅ (пуш 99d68af+2e7c2ee:
-vanilla-plan/vanilla-fit/vanilla-import-nnunet + examples/toy_pipeline.py) →
-T7 ✅ (пуш bb6d6ac: −14 373 строки, nnunetv2/monai/medos.sdk выведены из
-трейнера целиком; сьюты: trainer 127 тестов CPU, монорепо 1542 passed).
-Фазы паритета (✅ 2026-10-06/07): ensemble-предиктор + ensemble-оценка в
-crossval (W11), poly-LR (W12), каскады coarse→fine (W13), DDP через torchrun
-(W14) — пуш bb520a5, 174 теста. Бенчмарк на реальном датасете (W15,
-docs/benchmark-pulmo-2026-10-07.md): 20 кейсов hydrothorax (PulmoAI),
-один сплит/бюджет, один оценщик — nnU-Net 0.764 fg Dice vs Medlange 0.000
-на 5 эпохах. Найдено и исправлено по ходу: per-пресет физический патч
-(8x дефицит контекста GPU), rot90 для неквадратных патчей, --batch-size
-override, --device у evaluate, pytest pythonpath. ВЫВОД: W16 — нормализация
-интенсивности по статистикам fingerprint (z-score как у nnU-Net CTNormalization),
-ресемплинг к медианному спейсингу, воркеры даталоадера, перезапуск на
-100 эпохах. Только после W16 заявление "лучше nnU-Net" имеет смысл проверять
-повторным бенчмарком.
+Order: T1→T2→T3 (vertical slice on synthetic data, ✅ 2026-10-04) → T4 ✅ (push
+7c296a3, 2026-10-05: sliding window + served-twin + predict CLI) → T5 ✅ (push
+8c0209d: fingerprint→plan with reasoned decisions) → T6 ✅ (push
+99d68af+2e7c2ee: vanilla-plan/vanilla-fit/vanilla-import-nnunet +
+examples/toy_pipeline.py) → T7 ✅ (push bb6d6ac: −14,373 lines, nnunetv2/monai/
+medos.sdk fully removed from the trainer; suites: trainer 127 tests CPU,
+monorepo 1542 passed). Parity phases (✅ 2026-10-06/07): ensemble predictor +
+ensemble evaluation in crossval (W11), poly-LR (W12), coarse→fine cascades
+(W13), DDP via torchrun (W14) — push bb520a5, 174 tests. Benchmark on a real
+dataset (W15, docs/benchmark-pulmo-2026-10-07.md): 20 hydrothorax cases
+(PulmoAI), one split/budget, one evaluator — nnU-Net 0.764 fg Dice vs Medlange
+0.000 at 5 epochs. Found and fixed along the way: per-preset physical patch
+(8× GPU context deficit), rot90 for non-square patches, --batch-size
+override, --device for evaluate, pytest pythonpath. CONCLUSION: W16 —
+intensity normalization from fingerprint statistics (z-score as in nnU-Net
+CTNormalization), resampling to the median spacing, dataloader workers, restart
+at 100 epochs. Only after W16 does the claim "better than nnU-Net" make sense
+to verify with a repeated benchmark.
 
-Платформенный run-dir контракт (plan/fit/execute через medos.sdk) сознательно
-срезан — интеграция vanilla-бэкенда с core (autoconfig-маппинг, modelcard) —
-отдельная фаза после C-next, если владелец решит возвращать платформенный
-путь обучения.
+The platform run-dir contract (plan/fit/execute via medos.sdk) is deliberately
+cut — integration of the vanilla backend with core (autoconfig mapping,
+modelcard) is a separate phase after C-next, if the owner decides to bring back
+the platform training path.
 
-- **T8 (предложение владельца 2026-10-04): Triton-ядра** (OpenAI Triton, GPU) —
-  опциональный ускоритель архитектур: слитые свёртка+norm, fused softmax-Dice.
-  Эталоном остаётся чистый PyTorch-путь: CPU и машины без GPU обязаны обучать
-  и инференсить без Triton; ядра — за детектом возможностей и флагом плана.
-  Внимание на омоним: это НЕ NVIDIA Triton Inference Server (тот — в core/C2).
+- **T8 (owner proposal 2026-10-04): Triton kernels** (OpenAI Triton, GPU) —
+  an optional accelerator of architectures: fused conv+norm, fused softmax-Dice.
+  The pure PyTorch path remains the reference: CPUs and GPU-less machines must
+  be able to train and run inference without Triton; the kernels sit behind
+  capability detection and a plan flag. Mind the homonym: this is NOT the
+  NVIDIA Triton Inference Server (that one is in core/C2).
 
-## Фаза V-next — Viewer как платформа (по аудиту docs/audits/viewer-2026-10-04.md)
+## Phase V-next — Viewer as a platform (per audit docs/audits/viewer-2026-10-04.md)
 
-1. OVERLAY: реализовать потребителя или удалить вид из реестра.
-2. Сетевой seam: экспорт сконфигурированного DicomWebClient (фасад в src/core),
-   проброс authHeaderProvider из viewer-config.js — secured PACS без proxy-инъекции.
-3. Манифест плагинов (viewer.plugins.js) — регистрация без правки app.js;
-   гейт на коллизии клавиш инструментов.
-4. Починить docs/extensions.md (реальный TOOL API) + API-референс (state, вклады,
-   ctx, CSS-токены, схемы JSON).
-5. Честная история про transfer syntax (uncompressed-only в README/getting-started;
-   опциональный WASM-декодек за флагом — отдельным решением).
+1. OVERLAY: implement the consumer or remove the view from the registry.
+2. Network seam: export the configured DicomWebClient (facade in src/core),
+   pass through authHeaderProvider from viewer-config.js — secured PACS without
+   proxy injection.
+3. Plugin manifest (viewer.plugins.js) — registration without editing app.js;
+   a gate on tool hotkey collisions.
+4. Fix docs/extensions.md (the real TOOL API) + the API reference (state,
+   contribution points, ctx, CSS tokens, JSON schemas).
+5. An honest story about transfer syntax (uncompressed-only in README/getting-started;
+   an optional WASM codec behind a flag — as a separate decision).
 
-## Фаза C-next — Core как production SDK (по аудиту docs/audits/core-2026-10-04.md)
+## Phase C-next — Core as a production SDK (per audit docs/audits/core-2026-10-04.md)
 
-1. Живучесть bus: ExternalWorker не коммитит offset при CodecError/падении без
-   error-топика; backoff в run_forever; poison → error-топик или DLQ.
-2. Идемпотентность записи: провести expected_idempotency_key до PlatformWriter
-   (сейчас всегда None — дубли SEG при повторном прогоне).
-3. Карточка 1.1: трейнер пишет structure/concept_key; публичная JSON-схема
-   карточки в medos/schemas/; верификация digest весов в ModelCard.load.
-4. Реальный kserve_v2-путь: клиентский sliding window + обратный маппинг в source
-   grid (трейнер T4 даёт эталон реализации); e2e против Triton-репозитория из
-   deploy_model.
-5. Многомодельность (маршрутизация по model_id заявки или отказ при mismatch),
-   наблюдаемость (logging/метрики), публикация в PyPI, SDK-only упаковка.
+1. Bus resilience: ExternalWorker does not commit the offset on CodecError/
+   failure without an error topic; backoff in run_forever; poison → error topic
+   or DLQ.
+2. Write idempotency: thread expected_idempotency_key through to PlatformWriter
+   (currently always None — duplicate SEGs on rerun).
+3. Card 1.1: the trainer writes structure/concept_key; a public JSON schema of
+   the card in medos/schemas/; weight digest verification in ModelCard.load.
+4. A real kserve_v2 path: client-side sliding window + reverse mapping into the
+   source grid (trainer T4 provides the reference implementation); e2e against
+   the Triton repository from deploy_model.
+5. Multi-model support (routing by the request's model_id or refusal on
+   mismatch), observability (logging/metrics), PyPI publication, SDK-only
+   packaging.
 
-## Миграция в медленж-репозитории
+## Migration to the medlange repositories
 
-Статус 2026-10-04: организация `github.com/medlange` собрана — созданы и запушены
-`medlange/{core,trainer,viewer}` (public, `main`, автор коммитов ATMZR) и профиль
-`medlange/.github`; чистые клоны проверены (viewer: 252 теста; core/trainer: импорты).
-Аудиты продуктов зафиксированы в `docs/audits/`. Монорепо `MedOS` остаётся
-источником истины для разработки; синк в сплиты → пуш — рабочий цикл до разбора
-припаркованной работы peer-сессии.
+Status 2026-10-04: the `github.com/medlange` organization is set up —
+`medlange/{core,trainer,viewer}` (public, `main`, commit author ATMZR) and the
+`medlange/.github` profile are created and pushed; clean clones verified
+(viewer: 252 tests; core/trainer: imports). Product audits are recorded in
+`docs/audits/`. The `MedOS` monorepo remains the source of truth for
+development; sync to the splits → push is the working cycle until the parked
+work of the peer session is sorted out.
 
-## Цели (измеримые, проверяемые)
+## Goals (measurable, verifiable)
 
-- **G-U3 (главная боль пользователя 2026-10-03):** радиолог открывает исследование во
-  вьювере и запускает анализ, не покидая просмотрщика: кнопка «Анализ» → диалог с
-  выбором модели из конфигурации → прогресс → результат наложением. Срок: 2026-10.
-- **G-V1:** сторонний разработчик добавляет панель/действие одним модулем + одной
-  регистрацией, без правки `app.js`; пример плагина и документация ≤30 строк на
-  контрибуцию. Срок: 2026-10.
-- **G-C1b ✅ (2026-10-03):** `Pipeline(writer=)` кладёт SEG/SR в архив через единый `medos.writer`
-  (схема карточки 1.1 с кодами понятий); e2e внешнего режима без ручных шагов.
-- **G-U1 ✅** сырой ключ креденшела работает из коробки (проверено 200).
-- **G-V2 ✅ (2026-10-03):** `viewer.config.json` — панели/тема/брендинг/роутинг
-  (`?study=` deep link) без пересборки; дефолт шипуется в дереве, деплой монтирует
-  поверх (Medlange-палитра живьём в браузере).
-- **G-C2 ✅ (2026-10-03, с зафиксированным внешним блокером последнего шага):**  `tools/deploy_model.py --modelcard <run> --repo <repo>` — карточка тренера
-  (`medlange.modelcard/1`) → Triton model repository одной командой: ONNX-экспорт
-  (`packaging.onnx_bytes`), digest-проверка, гейты MOS-OPS-071-075 по построению,
-  warmup из golden-фикстуры. Прогон на обученной модели (control-585): реальный
-  Triton 2.51 принял repository/config/manifest, живой инференс артефакта бит-идентичен
-  локальному ORT. Блокер: бэкенд `onnxruntime` для Triton живёт только внутри образа
-  nvcr.io (403 без NGC-логина) — `unable to find backend library for backend
+- **G-U3 (the user's main pain point 2026-10-03):** a radiologist opens a study
+  in the viewer and runs an analysis without leaving the viewer: an "Analyze"
+  button → a dialog with model selection from the configuration → progress →
+  the result as an overlay. Due: 2026-10.
+- **G-V1:** a third-party developer adds a panel/action with one module + one
+  registration, without editing `app.js`; a plugin example and documentation
+  ≤30 lines per contribution. Due: 2026-10.
+- **G-C1b ✅ (2026-10-03):** `Pipeline(writer=)` stores SEG/SR in the archive
+  via the unified `medos.writer` (card schema 1.1 with concept codes); external-mode
+  e2e without manual steps.
+- **G-U1 ✅** the raw credential key works out of the box (verified 200).
+- **G-V2 ✅ (2026-10-03):** `viewer.config.json` — panels/theme/branding/routing
+  (`?study=` deep link) without a rebuild; the default ships in the tree, the
+  deployment mounts over it (the Medlange palette live in the browser).
+- **G-C2 ✅ (2026-10-03, with the external blocker of the last step recorded):**
+  `tools/deploy_model.py --modelcard <run> --repo <repo>` — the trainer's card
+  (`medlange.modelcard/1`) → Triton model repository in one command: ONNX export
+  (`packaging.onnx_bytes`), digest verification, gates MOS-OPS-071-075 by
+  construction, warmup from a golden fixture. Run on a trained model
+  (control-585): a real Triton 2.51 accepted the repository/config/manifest,
+  live inference of the artifact is bit-identical to local ORT. Blocker: the
+  `onnxruntime` backend for Triton lives only inside the nvcr.io image (403
+  without NGC login) — `unable to find backend library for backend
   'onnxruntime'`. Evidence: `D:/PycharmProjects/e2e-staging/g-c2/EVIDENCE.md`.
-- **G-C3 ✅ (2026-10-03):** `python -m medos.sdk run --profile <yaml>` — YAML-профиль
-  (закрытая схема: card/pacs/inference/writer/mode, секреты из env, отказы словарём
-  профиля) + CLI с batch-дисциплиной; профили `medos/examples/profiles/{local,mosmed}.yaml`;
-  e2e на живом стеке: LCTSC S1-104 из `F:/WorkSpace/PulmoAI` → 1 сегмент, exit 0.
-- **G-U4 ✅ (2026-10-03):** загрузка DICOM через UI viewer'а: S1-201 (118 файлов из
-  PulmoAI) → STOW-RS → 200 → ворклист 23→24; креденшел по методу (чтения read-only,
-  POST — uploader); 8 gate-тестов, viewer-сьют 244 зелёных.
+- **G-C3 ✅ (2026-10-03):** `python -m medos.sdk run --profile <yaml>` — a YAML
+  profile (closed schema: card/pacs/inference/writer/mode, secrets from env,
+  failures as a profile dict) + a CLI with batch discipline; profiles
+  `medos/examples/profiles/{local,mosmed}.yaml`; e2e on the live stack: LCTSC
+  S1-104 from `F:/WorkSpace/PulmoAI` → 1 segment, exit 0.
+- **G-U4 ✅ (2026-10-03):** DICOM upload via the viewer UI: S1-201 (118 files
+  from PulmoAI) → STOW-RS → 200 → worklist 23→24; credential by method (reads
+  read-only, POST — uploader); 8 gate tests, viewer suite 244 green.
 
-## Порядок
+## Order
 
-U1 → C1 → V1 → (U2, U3) → V2 → C2 → C3 → U4 → V3 → C4 → C5 — ✅ всё закрыто
-(2026-10-03/04). Дальше: долги (OHIF-closure, instance_norm в трейсере, nvcr-login
-для Triton, PyPI-публикация medos) — по мере касания их области; следующая фаза
-планирования — за пользователем.
+U1 → C1 → V1 → (U2, U3) → V2 → C2 → C3 → U4 → V3 → C4 → C5 — ✅ all closed
+(2026-10-03/04). Next: debts (OHIF closure, instance_norm in the tracer,
+nvcr-login for Triton, PyPI publication of medos) — as their area is touched;
+the next planning phase is up to the user.
 
-## Вопрос «сложнее ли, чем в OHIF?» — ответ
+## The "is it harder than in OHIF?" question — the answer
 
-Внутри репозитория viewer пишется проще, чем OHIF (ванильные ES-модули, нет сборки,
-217 исполняемых архитектурных тестов). Но у OHIF есть то, чего у viewer нет: стабильный
-сторонний extension API (modes/extensions) и экосистема. Разрыв закрывает Фаза V —
-это и есть «фреймворк как OHIF».
+Inside the viewer repository, development is simpler than in OHIF (vanilla
+ES modules, no build, 217 executable architecture tests). But OHIF has what
+the viewer lacks: a stable third-party extension API (modes/extensions) and an
+ecosystem. Phase V closes this gap — that is exactly the "framework like OHIF".

@@ -66,6 +66,19 @@ PATH_IN_DOC = re.compile(r"`((?:[\w.-]+/)+[\w.-]*)(?:::[\w.]+)?`")
 #: documentation this gate may not edit -- still names it for what it is.
 NOT_REPOSITORY_PATHS: dict[str, str] = {
     "configs/inference.json": "a file inside a MONAI Bundle, not in this repository",
+    # INSIDE A FIT'S OUTPUT BUNDLE, not the repository: `vanilla-fit --out DIR`
+    # writes DIR/checkpoints/epoch-<n>/ top-K snapshot bundles and
+    # DIR/checkpoints/index.json ranking them — trainer/README.md documents
+    # that layout to explain --resume-from and snapshot retention. They exist
+    # only after a fit runs; no checkout of this repository contains them.
+    "checkpoints/": (
+        "a directory a vanilla-fit run creates inside its OUT bundle "
+        "(top-K checkpoint retention), cited by trainer/README.md"
+    ),
+    "checkpoints/index.json": (
+        "the top-K index a vanilla-fit run writes inside its OUT bundle, "
+        "cited by trainer/README.md"
+    ),
 }
 
 #: Paths a README names in order to say they do NOT exist. A document is allowed to do
