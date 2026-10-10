@@ -471,7 +471,7 @@ DEF_RE = re.compile(rf"^\|?\s*(?:[-*]\s+)?\*\*(MOS-(?:{ALT})-\d{{3}})\*\*")
 KEY_RE = re.compile(r"(?<![A-Za-z`])(MUST NOT|MUST|SHOULD NOT|SHOULD|MAY)(?![A-Za-z`])")
 HEAD_RE = re.compile(r"^## (\d{1,2})\.\s+\S")
 ACC_RE = re.compile(r"^### Acceptance criteria\s*$")
-CYRILLIC_RE = re.compile(r"[Ѐ-ӿ]")
+CYRILLIC_RE = re.compile(r"[\u0400-\u04ff]")
 PLACEHOLDER_RE = re.compile(r"(?:\.\.\.|\bTODO\b|\bTBD\b|\bFIXME\b|<placeholder>)")
 
 # (area, chapter) -> inclusive range. MOS-CORE-022.

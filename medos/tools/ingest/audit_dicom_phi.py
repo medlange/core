@@ -121,11 +121,11 @@ INTENTIONAL: dict[tuple[int, int], str] = {
 }
 
 PATTERNS: dict[str, re.Pattern[str]] = {
-    "cyrillic": re.compile(r"[Ѐ-ӿ]{2,}"),
+    "cyrillic": re.compile(r"[\u0400-\u04ff]{2,}"),
     "date_like": re.compile(
         r"\b(19|20)\d{2}[-./]\d{1,2}[-./]\d{1,2}\b|\b\d{1,2}[-./]\d{1,2}[-./](19|20)\d{2}\b"
     ),
-    "person_name_delimited": re.compile(r"[A-Za-zЀ-ӿ]{2,}\^[A-Za-zЀ-ӿ]{2,}"),
+    "person_name_delimited": re.compile(r"[A-Za-z\u0400-\u04ff]{2,}\^[A-Za-z\u0400-\u04ff]{2,}"),
     "windows_user_path": re.compile(r"(?i)[A-Z]:\\+Users\\+[^\\\s\"']+"),
     "email": re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+"),
     "long_digit_run": re.compile(r"(?<!\d)\d{7,}(?!\d)"),

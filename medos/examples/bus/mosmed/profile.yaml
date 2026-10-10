@@ -5,7 +5,7 @@
 # message shapes below reproduce the integration style of an external management
 # system in the MosMed AI family (a Kafka message names a study; the processing result
 # is published back; errors go to their own topic), as described in the requirements
-# documents the repository owner supplied (БФТ / базовые диагностические требования,
+# documents the repository owner supplied (BFT / basic diagnostic requirements,
 # 2026). ANOTHER INTEGRATION'S SCHEMAS WILL DIFFER -- that is the point of the mapping
 # layer. A deployment writes its own profile next to its configuration and passes it to
 # `medos.sdk.adapters.bus.MessageMapping` / `medos.sdk.runtime.ExternalWorker`.

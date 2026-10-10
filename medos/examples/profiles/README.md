@@ -1,46 +1,46 @@
-# Cookbook: профили развёртывания Core
+# Cookbook: Core deployment profiles
 
-Три проверенных рецепта — каждый прогнан на живом стеке (2026-10-03), выводы
-подлинные. Предполагается compose-стек (`docker compose -f medos/deploy/compose/docker-compose.yml up -d`)
-и датасет LCTSC в `F:/WorkSpace/PulmoAI/TCIA`.
+Three proven recipes — each run against the live stack (2026-10-03); the outputs
+are genuine. Assumes the compose stack (`docker compose -f medos/deploy/compose/docker-compose.yml up -d`)
+and the LCTSC dataset at `F:/WorkSpace/PulmoAI/TCIA`.
 
-## Рецепт 1. Локальный профиль
+## Recipe 1. Local profile
 
-`local.yaml` — список исследований, прогон синхронно, результат в stdout.
+`local.yaml` — a list of studies, a synchronous run, the result to stdout.
 
 ```bash
 python -m medos.sdk run --profile medos/examples/profiles/local.yaml
 ```
 
-Вывод (подлинный, LCTSC-Test-S1-104, 131 инстанс):
+Output (genuine, LCTSC-Test-S1-104, 131 instances):
 
 ```json
 {"study": "1.3.6.1.4.1.14519.5.2.1.7014.4598.829677454205016768063779242553", "segments": 1, "measurements": 0, "stored": []}
 ```
 
-- `card: selftest` — дымовая карточка SDK; для реальной модели укажите каталог с
-  `modelcard.json` тренера (относительный путь — относительно файла профиля).
-- Добавьте секцию `writer: {kind: platform}` — SEG/SR уйдут в архив (путь C1b,
-  проверен e2e на S1-104: модальности исследования становятся `CT·SEG·SR`).
-- Отказ одного исследования — JSON-строка `{"study": ..., "refused": ...}` и
-  **батч продолжается**; exit code ненулевой, если был хоть один отказ.
+- `card: selftest` — the SDK's smoke-test card; for a real model, point it at the directory
+  with the trainer's `modelcard.json` (a relative path is resolved against the profile file).
+- Add a `writer: {kind: platform}` section — SEG/SR go to the archive (path C1b,
+  verified e2e on S1-104: the study's modalities become `CT·SEG·SR`).
+- A refusal of one study — a JSON line `{"study": ..., "refused": ...}` — and
+  **the batch continues**; the exit code is non-zero if there was at least one refusal.
 
-## Рецепт 2. Внешний профиль в стиле MosMed AI
+## Recipe 2. External profile in the MosMed AI style
 
-`mosmed.yaml` — заявка из Kafka, результат в Kafka, словарь внешней системы.
+`mosmed.yaml` — a task from Kafka, a result to Kafka, the external system's dictionary.
 
-Подготовка (один раз; топики общие, и старая история с чужим словарём — это
-`CodecError` с диагнозом, а не молчание):
+Preparation (once; the topics are shared, and old history with someone else's dictionary
+means a `CodecError` with a diagnosis, not silence):
 
 ```bash
-# 1) Поднимите шину, если ещё не поднята: compose-override добавляет kafka
-#    (в этом стеке она уже в compose: apache/kafka на 127.0.0.1:39092).
-# 2) Примите consumer-group к концу топика KAFKA-MESSAGE (иначе новая группа
-#    начнёт с earliest и споткнётся о сообщения прошлых экспериментов).
+# 1) Bring the bus up if it is not up yet: the compose override adds kafka
+#    (in this stack it is already in compose: apache/kafka on 127.0.0.1:39092).
+# 2) Advance the consumer group to the end of the KAFKA-MESSAGE topic (otherwise a new
+#    group starts at earliest and trips over messages from past experiments).
 ```
 
-Публикация заявки и прогон (`--once` — одно сообщение и выход; без флага — вечный
-цикл воркера):
+Publishing a task and running (`--once` — one message and exit; without the flag — the
+worker's endless loop):
 
 ```bash
 python - <<'EOF'
@@ -52,42 +52,42 @@ EOF
 python -m medos.sdk run --profile medos/examples/profiles/mosmed.yaml --once
 ```
 
-В `DICOMREPORTNOTIFY` (подлинный вывод прогона 2026-10-03):
+In `DICOMREPORTNOTIFY` (genuine output of the 2026-10-03 run):
 
 ```json
 {"type": "DICOMREPORTNOTIFY", "studyIUID": "1.3.6.1.4.1.14519.5.2.1.7014.4598.346635067461584156068474273548", "taskId": "c4-cookbook-0001", "aiResult": true}
 ```
 
-Правила словаря, которые укусят один раз:
+Dictionary rules that will bite exactly once:
 
-- `inbound.fields` маппит **ключ внешнего payload → каноническое поле события**
-  (`studyInstanceUid: study_uid`), не наоборот. `CodecError` называет, чего не хватает.
-- `outbound.template` без плейсхолдеров шлёт наружу сообщение БЕЗ идентификаторов
-  исследования — внешняя система не поймёт, о ком речь. Плейсхолдеры: `{study_uid}`,
-  `{task_id}`, `{ai_result}`, `{metrics...}` (см. `medos.sdk.runtime._event_document`).
-- Секреты — через `token_env`, не литералами.
+- `inbound.fields` maps the **external payload key → the event's canonical field**
+  (`studyInstanceUid: study_uid`), not the other way round. A `CodecError` names what is missing.
+- An `outbound.template` without placeholders sends out a message WITHOUT the study's
+  identifiers — the external system will not know whom it is about. Placeholders: `{study_uid}`,
+  `{task_id}`, `{ai_result}`, `{metrics...}` (see `medos.sdk.runtime._event_document`).
+- Secrets — via `token_env`, not literals.
 
-## Рецепт 3. От обученной модели до сервинга
+## Recipe 3. From a trained model to serving
 
-Карточка тренера → Triton model repository одной командой (G-C2, путь C2):
+Trainer card → Triton model repository in one command (G-C2, path C2):
 
 ```bash
 python medos/tools/deploy_model.py --modelcard /path/to/run --repo ./model-repo
-docker compose --profile inference up -d   # Triton монтирует repository на /models
+docker compose --profile inference up -d   # Triton mounts the repository at /models
 ```
 
-Проверено на `artifacts/models/control-585` (`medos.chest-multipathology@0.1.0`):
-реальный Triton 2.51 принял repository/config/manifest; живой инференс артефакта
-бит-идентичен локальному ONNX Runtime. **Блокер последнего шага:** бэкенд
-`onnxruntime` для Triton поставляется только внутри образа `nvcr.io/nvidia/tritonserver`
-(на этом хосте 403 без NGC-логина) — после `docker login nvcr.io` профиль `inference`
-поднимается без единого изменения кода. Evidence: `e2e-staging/g-c2/EVIDENCE.md`.
+Verified on `artifacts/models/control-585` (`medos.chest-multipathology@0.1.0`):
+a real Triton 2.51 accepted the repository/config/manifest; live inference of the artifact
+is bit-identical to the local ONNX Runtime. **Last-step blocker:** the `onnxruntime`
+backend for Triton ships only inside the `nvcr.io/nvidia/tritonserver` image
+(on this host, 403 without an NGC login) — after `docker login nvcr.io` the `inference`
+profile comes up without a single code change. Evidence: `e2e-staging/g-c2/EVIDENCE.md`.
 
-## Отладка
+## Debugging
 
-| Симптом | Причина | Где смотреть |
+| Symptom | Cause | Where to look |
 |---|---|---|
-| `refused: profile: ...` | профиль против закрытой схемы | текст отказа — словарём профиля |
-| `CodecError: payload carries no '...'` | внешний payload не несёт ключа маппинга | `inbound.fields` |
-| 401 на POST /dicomweb | uploader-креденшел не задан | `MEDOS_GATEWAY_UPLOADER_KEY` |
-| `unable to find backend library 'onnxruntime'` | нет nvcr-доступа | Рецепт 3 |
+| `refused: profile: ...` | profile violates the closed schema | the refusal text, in the profile's vocabulary |
+| `CodecError: payload carries no '...'` | the external payload lacks a mapping key | `inbound.fields` |
+| 401 on POST /dicomweb | the uploader credential is not set | `MEDOS_GATEWAY_UPLOADER_KEY` |
+| `unable to find backend library 'onnxruntime'` | no nvcr access | Recipe 3 |

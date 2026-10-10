@@ -1,12 +1,12 @@
-# Medlange Core — пример профиля локального развёртывания (mode: local).
+# Medlange Core — example of a local-deployment profile (mode: local).
 #
-# Что делает: берёт перечисленные исследования из PACS, гоняет через модель,
-# результаты (SEG/SR) кладёт обратно в архив через платформенный writer.
-# Значения ниже — дефолты compose-стека на localhost; подставьте свои.
+# What it does: takes the listed studies from the PACS, runs them through the
+# model, stores the results (SEG/SR) back into the archive via the platform writer.
+# The values below are the compose stack's localhost defaults; substitute your own.
 version: 1
 
-# Каталог с modelcard.json (карточка тренера) или строка 'selftest' для дымовой
-# прогонки SDK без модели.
+# Directory containing modelcard.json (the trainer's model card) or the string
+# 'selftest' for a smoke run of the SDK without a model.
 card: selftest
 
 pacs:
@@ -16,11 +16,11 @@ pacs:
 
 inference:
   kind: kserve_v2
-  url: "http://127.0.0.1:8010"        # Triton (профиль inference) или иной KServe v2
+  url: "http://127.0.0.1:8010"        # Triton (inference profile) or another KServe v2
   model_version: null
 
-# Какие серии обрабатывать: ct_only (умолчание pipeline, C5) или image_only
-# (явный opt-in: все image-модальности, без derived SEG/SR/RTSTRUCT).
+# Which series to process: ct_only (the pipeline default, C5) or image_only
+# (explicit opt-in: all image modalities, without derived SEG/SR/RTSTRUCT).
 select_series: ct_only
 
 writer:

@@ -33,7 +33,7 @@ def test_the_cookbook_types_the_cli_that_exists() -> None:
 
 
 def test_the_cookbook_states_the_fields_direction_the_codec_enforces() -> None:
-    assert re.search(r"ключ внешнего payload\s*→\s*каноническое поле", COOKBOOK), (
+    assert re.search(r"external payload key\s*→\s*the event's canonical field", COOKBOOK), (
         "decode_request reads mapping.fields as external-key -> canonical-field; the "
         "cookbook must say so in words, because the CodecError is where operators "
         "meet the rule otherwise"

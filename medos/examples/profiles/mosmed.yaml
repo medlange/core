@@ -1,16 +1,17 @@
-# Medlange Core — пример профиля внешнего развёртывания в стиле MosMed AI
-# (mode: external): заявка приходит сообщением из Kafka, результат уходит сообщением.
+# Medlange Core — example of an external deployment in the MosMed AI style
+# (mode: external): a task arrives as a Kafka message, the result leaves as one.
 #
-# Схема топиков/полей — ПРИМЕР внешней системы, не контракт: подставьте словарь
-# своей интеграции (топики inbound/outbound/error и маппинг полей).
+# The topic/field scheme is an EXAMPLE of an external system, not a contract:
+# substitute your own integration's dictionary (the inbound/outbound/error topics
+# and the field mapping).
 version: 1
 
-card: /srv/medlange/models/lung-segmentation   # каталог с modelcard.json
+card: /srv/medlange/models/lung-segmentation   # directory containing modelcard.json
 
 pacs:
   kind: dicomweb
   base_url: "https://pacs.example.org/dicomweb/00000000-0000-0000-0000-000000000000"
-  token_env: MEDOS_PACS_TOKEN                  # секрет — из окружения, не из файла
+  token_env: MEDOS_PACS_TOKEN                  # secret — from the environment, not from the file
 
 inference:
   kind: kserve_v2

@@ -917,7 +917,7 @@ Declared mutants: **M1** disable RLS on `studies` (fails P3); **M2** make QIDO-R
 
 #### 14.7.5 AT-11 — render and hydrate, not "displays"
 
-This replaces the previous `§109` step 11, "OHIF отображает результаты", which no automated system could fail. AT-11 is the automation of Chapter 4's pinned-viewer rendering check `~~MOS-IMG-157~~ MOS-IMG-157a`: its release gating is owned here — 0.1.0, release-blocking under MOS-TEST-062 — and Chapter 4 `MOS-IMG-159` MUST NOT be read as relaxing it.
+This replaces the previous `§109` step 11, "OHIF displays results", which no automated system could fail. AT-11 is the automation of Chapter 4's pinned-viewer rendering check `~~MOS-IMG-157~~ MOS-IMG-157a`: its release gating is owned here — 0.1.0, release-blocking under MOS-TEST-062 — and Chapter 4 `MOS-IMG-159` MUST NOT be read as relaxing it.
 
 **MOS-TEST-068 (pinning)** — The viewer under test MUST be pinned by digest. `medos/deploy/compose/ohif.lock` records `image`, `tag: v3.9.2`, `digest`, `mode: @ohif/mode-longitudinal`, and `extensions: ["@ohif/extension-cornerstone-dicom-seg", "@ohif/extension-cornerstone-dicom-sr"]`. CI job `viewer-pin` asserts the running container's `RepoDigest` equals the lock. Selectors used by the test live in `tests/e2e/viewer-selectors.yaml`, so a viewer upgrade changes a data file and a digest, never test logic.
 
