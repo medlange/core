@@ -81,6 +81,23 @@
 
 ## Found along the way (defects and debts)
 
+- **W22 Triton acceleration layer — EVALUATED, DEFERRED with return criteria.**
+  The owner's question ("should we write Triton kernels?") was answered with
+  measurements over instinct: conv3d already runs as cudnn-tuned SASS, and
+  Triton does not beat cudnn on standard conv shapes — so the kernel layer is
+  not where this stack loses time. The candidates that WOULD pay, in expected
+  value order: (1) fused GroupNorm/LeakyReLU (memory-bandwidth fusion,
+  ~5-15% of the train step once convs are fast); (2) fused masked CE+soft-Dice
+  loss over the deep-supervision tuple (~2-5%); (3) GPU-side augmentation to
+  retire the CPU producer (only if profiling shows the producer limiting
+  again). RETURN CRITERIA — start the layer only when ALL hold: AMP restored
+  (the 1.7x lever) or definitively replaced; cudnn.benchmark and
+  channels_last measured (bench_speed.py, W22); a profile shows elementwise/
+  memory-bound share ≥25% of the train step. Ship as an opt-in
+  `--triton-kernels` flag with a pure-torch fallback and golden-tensor parity
+  tests — never as a hard dependency. Until then the honest answer to "why
+  not Triton" is "it would cost a week to buy what cudnn.benchmark buys in a
+  line".
 - **W21, trainer defect (open; the texture theory disproved by recurrence):**
   a deadlock in AMP synchronization (`GradScaler` → `found_inf.item()`, GPU 0%,
   two byte-identical faulthandler dumps 10 minutes apart). First occurrence
