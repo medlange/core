@@ -81,6 +81,16 @@
 
 ## Found along the way (defects and debts)
 
+- **CUDA-exit segfault (rc=139), two occurrences, open:** the fit process
+  dies with SIGSEGV during process teardown — AFTER the bundle and
+  top-K snapshots are fully written (observed 2026-10-11 on ml-i250f
+  fp32 and 2026-10-12 on ml-xlg250s1; both external `vanilla-evaluate`
+  runs scored the artifacts normally). Same instability class as the
+  W21c AMP deadlock (torch 2.14.1+cu130 / RTX 5090): the campaign
+  workaround is that the eval runs as a separate process, so the
+  segfault costs nothing but the exit code. Root cause open — a
+  minimal repro and a torch bug report would start with
+  `run_fh.py`-wrapped fits on this box.
 - **W22 Triton acceleration layer — EVALUATED, DEFERRED with return criteria.**
   The owner's question ("should we write Triton kernels?") was answered with
   measurements over instinct: conv3d already runs as cudnn-tuned SASS, and
